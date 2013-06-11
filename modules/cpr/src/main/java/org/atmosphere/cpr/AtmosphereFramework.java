@@ -1102,15 +1102,16 @@ public class AtmosphereFramework {
         s = sc.getInitParameter(PROPERTY_SESSION_SUPPORT);
         if (s != null) {
             config.setSupportSession(Boolean.valueOf(s));
-            if (sc.getServletContext().getMajorVersion() >= 3) {
-                try {
-                    sc.getServletContext().addListener(SessionSupport.class);
-                } catch (Throwable t) {
-                    logger.warn("SessionSupport error. Make sure you define {} as a listener in web.xml instead", SessionSupport.class.getName(), t);
-                }
-            } else {
-                logger.debug("Make sure you define {} as a listener in web.xml", SessionSupport.class.getName());
-            }
+            // if (sc.getServletContext().getMajorVersion() >= 3) {
+            // try {
+            // sc.getServletContext().addListener(SessionSupport.class);
+            // } catch (Throwable t) {
+            // logger.warn("SessionSupport error. Make sure you define {} as a listener in web.xml instead", SessionSupport.class.getName(), t);
+            // }
+            // } else {
+            // logger.debug("Make sure you define {} as a listener in web.xml",
+            // SessionSupport.class.getName());
+            // }
             isSessionSupportSpecified = true;
         }
         s = sc.getInitParameter(PROPERTY_ALLOW_SESSION_TIMEOUT_REMOVAL);
