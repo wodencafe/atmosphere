@@ -1170,6 +1170,12 @@ jQuery.atmosphere = function() {
                         }
                     }
                 };
+
+                if (_websocket.url === undefined) {
+                    // Android 4.1 does not really support websockets and fails silently
+                    _websocket.onclose({reason:"Android 4.1 does not support websockets.", wasClean: false});
+                }
+
             }
 
             function _handleProtocol(request, message) {
