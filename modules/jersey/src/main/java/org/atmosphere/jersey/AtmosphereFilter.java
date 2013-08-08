@@ -109,21 +109,15 @@ import java.util.concurrent.TimeUnit;
 import static org.atmosphere.cpr.ApplicationConfig.BROADCASTER_CLASS;
 import static org.atmosphere.cpr.ApplicationConfig.BROADCASTER_FACTORY;
 import static org.atmosphere.cpr.ApplicationConfig.DEFAULT_CONTENT_TYPE;
-import static org.atmosphere.cpr.ApplicationConfig.DROP_ACCESS_CONTROL_ALLOW_ORIGIN_HEADER;
 import static org.atmosphere.cpr.ApplicationConfig.JERSEY_CONTAINER_RESPONSE_WRITER_CLASS;
-import static org.atmosphere.cpr.ApplicationConfig.NO_CACHE_HEADERS;
 import static org.atmosphere.cpr.ApplicationConfig.RESUME_ON_BROADCAST;
 import static org.atmosphere.cpr.ApplicationConfig.SUPPORT_LOCATION_HEADER;
 import static org.atmosphere.cpr.ApplicationConfig.SUSPENDED_ATMOSPHERE_RESOURCE_UUID;
 import static org.atmosphere.cpr.FrameworkConfig.ATMOSPHERE_CONFIG;
-import static org.atmosphere.cpr.HeaderConfig.ACCESS_CONTROL_ALLOW_CREDENTIALS;
-import static org.atmosphere.cpr.HeaderConfig.ACCESS_CONTROL_ALLOW_ORIGIN;
-import static org.atmosphere.cpr.HeaderConfig.CACHE_CONTROL;
-import static org.atmosphere.cpr.HeaderConfig.EXPIRES;
+import static org.atmosphere.cpr.FrameworkConfig.CALLBACK_JAVASCRIPT_PROTOCOL;
 import static org.atmosphere.cpr.HeaderConfig.JSONP_TRANSPORT;
 import static org.atmosphere.cpr.HeaderConfig.LONG_POLLING_TRANSPORT;
 import static org.atmosphere.cpr.HeaderConfig.POLLING_TRANSPORT;
-import static org.atmosphere.cpr.HeaderConfig.PRAGMA;
 import static org.atmosphere.cpr.HeaderConfig.WEBSOCKET_UPGRADE;
 import static org.atmosphere.cpr.HeaderConfig.X_ATMOSPHERE_ERROR;
 import static org.atmosphere.cpr.HeaderConfig.X_ATMOSPHERE_TRACKING_ID;
@@ -438,6 +432,7 @@ public class AtmosphereFilter implements ResourceFilterFactory {
 
                     Broadcaster broadcaster = (Broadcaster) servletReq.getAttribute(INJECTED_BROADCASTER);
                     // @Subscribe
+                    // TODO: Optimize me
                     if (action == Action.SUBSCRIBE) {
                         Class<Broadcaster> c = null;
                         try {
@@ -591,23 +586,6 @@ public class AtmosphereFilter implements ResourceFilterFactory {
                         }
                     }
                 }
-            }
-
-            boolean injectCacheHeaders = (Boolean) servletReq.getAttribute(NO_CACHE_HEADERS);
-            boolean enableAccessControl = (Boolean) servletReq.getAttribute(DROP_ACCESS_CONTROL_ALLOW_ORIGIN_HEADER);
-
-            if (injectCacheHeaders) {
-                // Set to expire far in the past.
-                b = b.header(EXPIRES, "-1");
-                // Set standard HTTP/1.1 no-cache headers.
-                b = b.header(CACHE_CONTROL, "no-store, no-cache, must-revalidate");
-                // Set standard HTTP/1.0 no-cache header.
-                b = b.header(PRAGMA, "no-cache");
-            }
-
-            if (enableAccessControl) {
-                b = b.header(ACCESS_CONTROL_ALLOW_ORIGIN, servletReq.getHeader("Origin") == null ? "*" : servletReq.getHeader("Origin"));
-                b = b.header(ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
             }
             return b;
         }
@@ -860,6 +838,18 @@ public class AtmosphereFilter implements ResourceFilterFactory {
                     }
 
                     synchronized (response) {
+                        AtmosphereResourceEventListenerAdapter a =
+                                (AtmosphereResourceEventListenerAdapter) servletReq.getAttribute(CALLBACK_JAVASCRIPT_PROTOCOL);
+                        if (a != null) {
+                            try {
+                                a.onSuspend(r.getAtmosphereResourceEvent());
+                            } catch (Exception ex) {
+                                logger.debug("AtmosphereFilter error", ex);
+                            } finally {
+                                servletReq.removeAttribute(CALLBACK_JAVASCRIPT_PROTOCOL);
+                            }
+                        }
+                        r.removeEventListener(a);
                         response.setResponse(b.entity(entity).build());
                         response.write();
                     }

@@ -145,17 +145,17 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
                 if (testClassExists(GLASSFISH_V2))
                     add(GlassFishv2CometSupport.class);
 
-                if (testClassExists(JETTY))
-                    add(JettyCometSupport.class);
-
-                if (testClassExists(JETTY_7))
+                if (testClassExists(JETTY_9))
                     add(Jetty7CometSupport.class);
 
                 if (testClassExists(JETTY_8))
                     add(Jetty7CometSupport.class);
 
-                if (testClassExists(JETTY_9))
+                if (testClassExists(JETTY_7))
                     add(Jetty7CometSupport.class);
+
+                if (testClassExists(JETTY))
+                    add(JettyCometSupport.class);
 
                 if (testClassExists(JBOSSWEB))
                     add(JBossWebCometSupport.class);
@@ -174,9 +174,6 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
 
                 if (testClassExists(NETTY))
                     add(NettyCometSupport.class);
-
-                if (testClassExists(JBOSS_AS7_WEBSOCKET))
-                    add(JBossWebSocketSupport.class);
             }
         };
     }
@@ -186,8 +183,12 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
         return new LinkedList<Class<? extends AsyncSupport>>() {
             {
                 if (useServlet30Async && !useNativeIfPossible) {
+                    // Must always be called first.
                     if (testClassExists(JSR356_WEBSOCKET))
                         add(JSR356AsyncSupport.class);
+
+                    if (testClassExists(JBOSS_AS7_WEBSOCKET))
+                        add(JBossWebSocketSupport.class);
 
                     if (testClassExists(TOMCAT_WEBSOCKET))
                         add(Tomcat7Servlet30SupportWithWebSocket.class);
@@ -295,7 +296,8 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
         }
 
         if (cs == null) {
-            return new BlockingIOCometSupport(config);
+            AsyncSupport nativeSupport = resolveNativeCometSupport(detectContainersPresent());
+            return nativeSupport == null ? new BlockingIOCometSupport(config) : nativeSupport;
         } else {
             return cs;
         }

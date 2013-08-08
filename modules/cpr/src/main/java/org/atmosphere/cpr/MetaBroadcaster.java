@@ -45,6 +45,8 @@ import java.util.concurrent.TimeoutException;
  * <p/>
  * NOTE: Broadcaster's name must start with / in order to get retrieved by this class.
  *
+ * This class is not THREAD SAFE.
+ *
  * @author Jeanfrancois Arcand
  */
 public class MetaBroadcaster {
@@ -53,6 +55,7 @@ public class MetaBroadcaster {
     private final static Logger logger = LoggerFactory.getLogger(MetaBroadcaster.class);
     private final static MetaBroadcaster metaBroadcaster = new MetaBroadcaster();
     private final static ConcurrentLinkedQueue<BroadcasterListener> broadcasterListeners = new ConcurrentLinkedQueue<BroadcasterListener>();
+    private final static MetaBroadcasterFuture E = new MetaBroadcasterFuture(Collections.<Broadcaster>emptyList());
 
     protected MetaBroadcasterFuture broadcast(final String path, Object message, int time, TimeUnit unit, boolean delay) {
         if (BroadcasterFactory.getDefault() != null) {
@@ -70,8 +73,14 @@ public class MetaBroadcaster {
                 m.clear();
             }
 
+            if (l.isEmpty()) {
+                logger.warn("No Broadcaster match {}", path);
+                return E;
+            }
+
             MetaBroadcasterFuture f = new MetaBroadcasterFuture(l);
             CompleteListener cl = new CompleteListener(f);
+
             for (Broadcaster b : l) {
                 if (time <= 0) {
                     f.outerFuture(b.addBroadcasterListener(cl).broadcast(message));
@@ -84,7 +93,7 @@ public class MetaBroadcaster {
 
             return f;
         } else {
-            return new MetaBroadcasterFuture(Collections.<Broadcaster>emptyList());
+            return E;
         }
     }
 
@@ -170,7 +179,11 @@ public class MetaBroadcaster {
             f.countDown();
             if (f.isDone()) {
                 for (BroadcasterListener l : broadcasterListeners) {
-                    l.onComplete(b);
+                    try {
+                        l.onComplete(b);
+                    } catch (Exception ex) {
+                        logger.warn("", ex);
+                    }
                 }
             }
         }

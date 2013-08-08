@@ -16,6 +16,7 @@
 package org.atmosphere.interceptor;
 
 import org.atmosphere.cpr.Action;
+import org.atmosphere.cpr.AsynchronousProcessor;
 import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereInterceptor;
 import org.atmosphere.cpr.AtmosphereRequest;
@@ -27,7 +28,7 @@ import org.atmosphere.cpr.HeaderConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
+import static org.atmosphere.cpr.FrameworkConfig.ASYNCHRONOUS_HOOK;
 
 /**
  * When the browser close the connection, the atmosphere.js will send an unsubscribe message to tell
@@ -38,9 +39,13 @@ import java.io.IOException;
 public class OnDisconnectInterceptor implements AtmosphereInterceptor {
 
     private final Logger logger = LoggerFactory.getLogger(OnDisconnectInterceptor.class);
+    private AsynchronousProcessor p;
 
     @Override
     public void configure(AtmosphereConfig config) {
+        if (AsynchronousProcessor.class.isAssignableFrom(config.framework().getAsyncSupport().getClass())) {
+            p = AsynchronousProcessor.class.cast(config.framework().getAsyncSupport());
+        }
     }
 
     @Override
@@ -48,21 +53,15 @@ public class OnDisconnectInterceptor implements AtmosphereInterceptor {
         AtmosphereRequest request = AtmosphereResourceImpl.class.cast(r).getRequest(false);
         String s = request.getHeader(HeaderConfig.X_ATMOSPHERE_TRANSPORT);
         String uuid = request.getHeader(HeaderConfig.X_ATMOSPHERE_TRACKING_ID);
-        if (s != null && uuid != null && s.equalsIgnoreCase(HeaderConfig.DISCONNECT)) {
-            logger.debug("AtmosphereResource {} disconnected", uuid);
+        if (p !=  null && s != null && uuid != null && s.equalsIgnoreCase(HeaderConfig.DISCONNECT)) {
+            logger.trace("AtmosphereResource {} disconnected", uuid);
             AtmosphereResource ss = AtmosphereResourceFactory.getDefault().find(uuid);
             if (ss != null) {
-                ss.notifyListeners(new AtmosphereResourceEventImpl(AtmosphereResourceImpl.class.cast(ss), false, false, true, null));
-                try {
-                    try {
-                        // https://github.com/Atmosphere/atmosphere/issues/983
-                        ss.getRequest().setAttribute(AtmosphereResourceImpl.PRE_SUSPEND, "");
-                    } finally {
-                        AtmosphereResourceImpl.class.cast(ss).cancel();
-                    }
-                } catch (Throwable e) {
-                    logger.trace("", e);
-                }
+                // Block websocket closing detection
+                ss.getRequest().setAttribute(ASYNCHRONOUS_HOOK, null);
+                AtmosphereResourceEventImpl.class.cast(ss.getAtmosphereResourceEvent()).isClosedByClient(true);
+
+                p.completeLifecycle(ss, false);
             }
             return Action.CANCELLED;
         }
@@ -77,3 +76,4 @@ public class OnDisconnectInterceptor implements AtmosphereInterceptor {
         return "Browser disconnection detection";
     }
 }
+

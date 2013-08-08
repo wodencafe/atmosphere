@@ -16,13 +16,10 @@
 package org.atmosphere.samples.chat;
 
 import org.atmosphere.config.service.WebSocketHandlerService;
-import org.atmosphere.cpr.AtmosphereResource;
 import org.atmosphere.cpr.AtmosphereResourceEvent;
-import org.atmosphere.cpr.AtmosphereResourceEventListenerAdapter;
-import org.atmosphere.cpr.Broadcaster;
-import org.atmosphere.cpr.BroadcasterFactory;
 import org.atmosphere.util.SimpleBroadcaster;
 import org.atmosphere.websocket.WebSocket;
+import org.atmosphere.websocket.WebSocketEventListenerAdapter;
 import org.atmosphere.websocket.WebSocketHandler;
 import org.atmosphere.websocket.WebSocketHandlerAdapter;
 import org.codehaus.jackson.map.ObjectMapper;
@@ -45,8 +42,7 @@ public class WebSocketChat extends WebSocketHandlerAdapter {
 
     @Override
     public void onOpen(WebSocket webSocket) throws IOException {
-        webSocket.resource().setBroadcaster(BroadcasterFactory.getDefault().lookup("/chat", true));
-        webSocket.resource().addEventListener(new AtmosphereResourceEventListenerAdapter() {
+        webSocket.resource().addEventListener(new WebSocketEventListenerAdapter() {
             @Override
             public void onDisconnect(AtmosphereResourceEvent event) {
                 if (event.isCancelled()) {
@@ -59,9 +55,7 @@ public class WebSocketChat extends WebSocketHandlerAdapter {
     }
 
     public void onTextMessage(WebSocket webSocket, String message) throws IOException {
-        AtmosphereResource r = webSocket.resource();
-        Broadcaster b = r.getBroadcaster();
-        b.broadcast(mapper.writeValueAsString(mapper.readValue(message, Data.class)));
+        webSocket.broadcast(mapper.writeValueAsString(mapper.readValue(message, Data.class)));
     }
 
     public final static class Data {

@@ -16,6 +16,8 @@
 package org.atmosphere.cpr;
 
 import org.atmosphere.cpr.AtmosphereFramework.AtmosphereHandlerWrapper;
+import org.atmosphere.cpr.AtmosphereRequest.NoOpsRequest;
+import org.atmosphere.interceptor.JavaScriptProtocol;
 
 /**
  * Request Attribute a framework integrator can use to lookup Atmosphere internal object.
@@ -43,6 +45,14 @@ public interface FrameworkConfig {
      * The default JGroups Broadcaster class
      */
     String JGROUPS_BROADCASTER = "org.atmosphere.plugin.jgroups.JGroupsBroadcaster";
+    /**
+     * The default RMI Broadcaster class
+     */
+    String RMI_BROADCASTER = "org.atmosphere.plugin.rmi.RMIBroadcaster";
+    /**
+     * The default RabbitMQ Broadcaster class
+     */
+    String RABBITMQ_BROADCASTER = "org.atmosphere.plugin.rabbitmq.RabbitMQBroadcaster";
     /**
      * The default XMPP Broadcaster class
      */
@@ -115,4 +125,29 @@ public interface FrameworkConfig {
      *  Callback hook for Framework implementing Atmosphere support.
      */
     String ASYNCHRONOUS_HOOK = FrameworkConfig.class.getName() + ".asynchronousProcessorHook";
+    /**
+     * The Callback for handshaking the {@link org.atmosphere.interceptor.JavaScriptProtocol}
+     */
+    String CALLBACK_JAVASCRIPT_PROTOCOL = JavaScriptProtocol.class.getName() + ".callback";
+    /**
+     * The Jersey package used for scanning annotation.
+     */
+    String JERSEY_SCANNING_PACKAGE = "com.sun.jersey.config.property.packages";
+    /**
+     * Throw Exception from cloned request
+     */
+    String THROW_EXCEPTION_ON_CLONED_REQUEST = NoOpsRequest.class.getName() + ".throwExceptionOnClonedRequest";
+    /**
+     * The subject for the current request
+     */
+    String SECURITY_SUBJECT = AtmosphereRequest.class.getName() + ".subject";
+    /**
+     * The {@link javax.servlet.AsyncContext}
+     */
+    String ASYNC_CONTEXT = "org.atmosphere.container.asyncContext";
+    /**
+     * A flag indicating a message has been written on the resource. This is useful to know if a resource must be resumed for transport like
+     * long-polling.
+     */
+    String MESSAGE_WRITTEN = Broadcaster.class.getName() + ".messageWritten";
 }

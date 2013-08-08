@@ -79,6 +79,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
     private boolean destroyable;
     private HttpServletResponse response;
     private boolean forceAsyncIOWriter = false;
+    private String uuid = "0";
 
     public AtmosphereResponse(AsyncIOWriter asyncIOWriter, AtmosphereRequest atmosphereRequest, boolean destroyable) {
         super(dsr);
@@ -341,6 +342,10 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         if (delegateToNativeResponse) {
             _r().setHeader(name, value);
         }
+
+        if (name.equalsIgnoreCase(HeaderConfig.X_ATMOSPHERE_TRACKING_ID)) {
+            uuid = value;
+        }
     }
 
     /**
@@ -410,7 +415,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         } else {
             return super.getResponse();
         }
-   	}
+    }
 
     public String getStatusMessage() {
         return statusMessage;
@@ -519,6 +524,18 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         return this;
     }
 
+    private void validAsyncIOWriter() throws IOException {
+        if (asyncIOWriter == null) throw new IOException("AtmosphereResource Cancelled: " + uuid);
+    }
+
+    private boolean validFlushOrClose() {
+        if (asyncIOWriter == null) {
+            logger.trace("AtmosphereResponse for {} has been closed", uuid);
+            return false;
+        }
+        return true;
+    }
+
     /**
      * {@inheritDoc}
      */
@@ -529,14 +546,13 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
 
                 @Override
                 public void write(int i) throws java.io.IOException {
-                    if (asyncIOWriter == null) return;
-
-                    writeStatusAndHeaders();
-
                     // Prevent StackOverflow
                     boolean b = forceAsyncIOWriter;
-                    forceAsyncIOWriter = false;
                     try {
+                        validAsyncIOWriter();
+                        writeStatusAndHeaders();
+
+                        forceAsyncIOWriter = false;
                         asyncIOWriter.write(AtmosphereResponse.this, new byte[]{(byte) i});
                     } catch (IOException e) {
                         handleException(e);
@@ -548,14 +564,13 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
 
                 @Override
                 public void write(byte[] bytes) throws java.io.IOException {
-                    if (asyncIOWriter == null) return;
-
-                    writeStatusAndHeaders();
-
                     // Prevent StackOverflow
                     boolean b = forceAsyncIOWriter;
-                    forceAsyncIOWriter = false;
                     try {
+                        validAsyncIOWriter();
+                        writeStatusAndHeaders();
+
+                        forceAsyncIOWriter = false;
                         asyncIOWriter.write(AtmosphereResponse.this, bytes);
                     } catch (IOException e) {
                         handleException(e);
@@ -567,14 +582,13 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
 
                 @Override
                 public void write(byte[] bytes, int start, int offset) throws java.io.IOException {
-                    if (asyncIOWriter == null) return;
-
-                    writeStatusAndHeaders();
-
                     // Prevent StackOverflow
                     boolean b = forceAsyncIOWriter;
-                    forceAsyncIOWriter = false;
                     try {
+                        validAsyncIOWriter();
+                        writeStatusAndHeaders();
+
+                        forceAsyncIOWriter = false;
                         asyncIOWriter.write(AtmosphereResponse.this, bytes, start, offset);
                     } catch (IOException e) {
                         handleException(e);
@@ -586,7 +600,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
 
                 @Override
                 public void flush() throws IOException {
-                    if (asyncIOWriter == null) return;
+                    if (!validFlushOrClose()) return;
 
                     writeStatusAndHeaders();
 
@@ -605,7 +619,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
 
                 @Override
                 public void close() throws java.io.IOException {
-                    if (asyncIOWriter == null) return;
+                    if (!validFlushOrClose()) return;
 
                     // Prevent StackOverflow
                     boolean b = forceAsyncIOWriter;
@@ -667,11 +681,11 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
             return new PrintWriter(getOutputStream()) {
                 @Override
                 public void write(char[] chars, int offset, int lenght) {
-                    if (asyncIOWriter == null) return;
-
-                    // Prevent StackOverflow
                     boolean b = forceAsyncIOWriter;
                     try {
+                        validAsyncIOWriter();
+
+                        // Prevent StackOverflow
                         writeStatusAndHeaders();
                         forceAsyncIOWriter = false;
                         asyncIOWriter.write(AtmosphereResponse.this, new String(chars, offset, lenght));
@@ -685,10 +699,10 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
 
                 @Override
                 public void write(char[] chars) {
-                    if (asyncIOWriter == null) return;
-
                     boolean b = forceAsyncIOWriter;
                     try {
+                        validAsyncIOWriter();
+
                         writeStatusAndHeaders();
                         // Prevent StackOverflow
                         forceAsyncIOWriter = false;
@@ -703,10 +717,11 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
 
                 @Override
                 public void write(String s, int offset, int lenght) {
-                    if (asyncIOWriter == null) return;
-
                     boolean b = forceAsyncIOWriter;
+
                     try {
+                        validAsyncIOWriter();
+
                         writeStatusAndHeaders();
                         // Prevent StackOverflow
                         forceAsyncIOWriter = false;
@@ -721,10 +736,11 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
 
                 @Override
                 public void write(String s) {
-                    if (asyncIOWriter == null) return;
 
                     boolean b = forceAsyncIOWriter;
                     try {
+                        validAsyncIOWriter();
+
                         writeStatusAndHeaders();
                         // Prevent StackOverflow
                         forceAsyncIOWriter = false;
@@ -739,7 +755,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
 
                 @Override
                 public void flush() {
-                    if (asyncIOWriter == null) return;
+                    if (!validFlushOrClose()) return;
 
                     boolean b = forceAsyncIOWriter;
                     try {
@@ -756,7 +772,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
 
                 @Override
                 public void close() {
-                    if (asyncIOWriter == null) return;
+                    if (!validFlushOrClose()) return;
 
                     // Prevent StackOverflow
                     boolean b = forceAsyncIOWriter;
@@ -919,8 +935,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
     public void closeStreamOrWriter() {
         if (resource() != null && resource().transport() != AtmosphereResource.TRANSPORT.WEBSOCKET) {
             try {
-                boolean isUsingStream = (Boolean) request().getAttribute(PROPERTY_USE_STREAM);
-                if (isUsingStream) {
+                if (isUsingStream()) {
                     try {
                         getOutputStream().close();
                     } catch (java.lang.IllegalStateException ex) {
@@ -968,9 +983,8 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
             writeUsingOriginalResponse = false;
         }
 
-        boolean isUsingStream = (Boolean) request().getAttribute(PROPERTY_USE_STREAM);
         try {
-            if (isUsingStream) {
+            if (isUsingStream()) {
                 try {
                     OutputStream o = writeUsingOriginalResponse ? _r().getOutputStream() : getOutputStream();
                     o.write(data.getBytes(getCharacterEncoding()));
@@ -985,6 +999,15 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
             handleException(ex);
         }
         return this;
+    }
+
+    private boolean isUsingStream() {
+        Object s = request().getAttribute(PROPERTY_USE_STREAM);
+        if (s == null) {
+            return true;
+        } else {
+            return (Boolean) request().getAttribute(PROPERTY_USE_STREAM);
+        }
     }
 
     /**
@@ -1011,9 +1034,8 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
             writeUsingOriginalResponse = false;
         }
 
-        boolean isUsingStream = (Boolean) request().getAttribute(PROPERTY_USE_STREAM);
         try {
-            if (isUsingStream) {
+            if (isUsingStream()) {
                 try {
                     OutputStream o = writeUsingOriginalResponse ? _r().getOutputStream() : getOutputStream();
                     o.write(data);
@@ -1057,9 +1079,8 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
             writeUsingOriginalResponse = false;
         }
 
-        boolean isUsingStream = (Boolean) request().getAttribute(PROPERTY_USE_STREAM);
         try {
-            if (isUsingStream) {
+            if (isUsingStream()) {
                 try {
                     OutputStream o = writeUsingOriginalResponse ? _r().getOutputStream() : getOutputStream();
                     o.write(data, offset, length);
@@ -1134,17 +1155,11 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
     @Override
     public String toString() {
         return "AtmosphereResponse{" +
-                "cookies=" + cookies +
+                ", uuid=" + uuid +
                 ", headers=" + headers +
                 ", asyncIOWriter=" + asyncIOWriter +
                 ", status=" + status +
                 ", statusMessage='" + statusMessage + '\'' +
-                ", charSet='" + charSet + '\'' +
-                ", contentLength=" + contentLength +
-                ", contentType='" + contentType + '\'' +
-                ", isCommited=" + isCommited +
-                ", locale=" + locale +
-                ", headerHandled=" + headerHandled +
                 ", atmosphereRequest=" + atmosphereRequest +
                 ", writeStatusAndHeader=" + writeStatusAndHeader +
                 ", delegateToNativeResponse=" + delegateToNativeResponse +

@@ -148,7 +148,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
      */
     @Override
     public String getRemoteUser() {
-        return b.request.getRemoteUser();
+        return b.principal != null ? b.principal.getName() : b.request.getRemoteUser();
     }
 
     /**
@@ -300,7 +300,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
      */
     @Override
     public String getAuthType() {
-        return b.request.getAuthType();
+        return b.authType != null ? b.authType : b.request.getAuthType();
     }
 
     /**
@@ -502,7 +502,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
         if (qs.isEmpty()) {
             qs = b.queryString;
         }
-        if (!qs.isEmpty()){
+        if (!qs.isEmpty()) {
             QueryStringDecoder decoder = new QueryStringDecoder(getRequestURI() + "?" + qs);
             Map<String, List<String>> m = decoder.getParameters();
             Map<String, String[]> newM = new HashMap<String, String[]>();
@@ -651,8 +651,14 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
         if (resource() != null) {
             // UGLY, but we need to prevent looping here.
             HttpSession session = AtmosphereResourceImpl.class.cast(resource()).session;
-            if (session != null) {
-                return session;
+            try {
+                if (session != null) {
+                    // check if session is valid (isNew() will throw if not)
+                    session.isNew();
+                    return session;
+                }
+            } catch (IllegalStateException e) {
+                // session has been invalidated
             }
         }
 
@@ -675,7 +681,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
      */
     @Override
     public Principal getUserPrincipal() {
-        return b.request.getUserPrincipal();
+        return b.principal != null ? b.principal : b.request.getUserPrincipal();
     }
 
     /**
@@ -819,7 +825,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
      */
     @Override
     public boolean isSecure() {
-        return b.request.isSecure();
+        return isNotNoOps() ? b.request.isSecure() : b.isSecure;
     }
 
     /**
@@ -995,13 +1001,14 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
         private boolean destroyable = true;
         private Set<Cookie> cookies = new HashSet<Cookie>();
         private Set<Locale> locales = new HashSet<Locale>();
-
-
+        private Principal principal = null;
+        private String authType = null;
         private String contextPath = "";
         private String serverName = "";
         private int serverPort = 0;
         private HttpSession webSocketFakeSession;
         private String queryString = "";
+        private boolean isSecure = false;
 
         public Builder() {
         }
@@ -1165,6 +1172,21 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
             return this;
         }
 
+        public Builder principal(Principal principal) {
+            this.principal = principal;
+            return this;
+        }
+
+        public Builder authType(String authType) {
+            this.authType = authType;
+            return this;
+        }
+
+        public Builder isSSecure(boolean isSecure) {
+            this.isSecure = isSecure;
+            return this;
+        }
+
         public Builder locale(Locale locale) {
             locales.add(locale);
             return this;
@@ -1218,9 +1240,18 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
         }
     }
 
-    private final static class NoOpsRequest implements HttpServletRequest {
+    final static class NoOpsRequest implements HttpServletRequest {
 
+        private boolean throwExceptionOnCloned;
         public HttpSession fake;
+
+        public NoOpsRequest() {
+            this.throwExceptionOnCloned = false;
+        }
+
+        public NoOpsRequest(boolean throwExceptionOnCloned) {
+            this.throwExceptionOnCloned = throwExceptionOnCloned;
+        }
 
         @Override
         public boolean authenticate(HttpServletResponse response) throws IOException, ServletException {
@@ -1330,7 +1361,13 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
         @Override
         public HttpSession getSession(boolean create) {
             if (create && fake == null) {
-                fake = new FakeHttpSession("", null, System.currentTimeMillis(), -1);
+                fake = new FakeHttpSession("", null, System.currentTimeMillis(), -1) {
+                    @Override
+                    public void invalidate() {
+                        fake = null;
+                        super.invalidate();
+                    }
+                };
             }
             return fake;
         }
@@ -1362,17 +1399,24 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
 
         @Override
         public boolean isUserInRole(String role) {
+            if (this.throwExceptionOnCloned == true) {
+                throw new UnsupportedOperationException();
+            }
             return false;
         }
 
         @Override
         public void login(String username, String password) throws ServletException {
-
+            if (this.throwExceptionOnCloned == true) {
+                throw new ServletException();
+            }
         }
 
         @Override
         public void logout() throws ServletException {
-
+            if (this.throwExceptionOnCloned == true) {
+                throw new ServletException();
+            }
         }
 
         @Override
@@ -1617,10 +1661,13 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
                 .remotePort(request.getRemotePort())
                 .destroyable(isDestroyable)
                 .cookies(hs)
-                .session(copySession ? new FakeHttpSession(request.getSession(true)) : null);
+                .session(copySession ? new FakeHttpSession(request.getSession(true)) : null)
+                .principal(request.getUserPrincipal())
+                .authType(request.getAuthType())
+                .isSSecure(request.isSecure());
 
         if (loadInMemory) {
-            r = new NoOpsRequest();
+            r = new NoOpsRequest(Boolean.parseBoolean(request.getAttribute(FrameworkConfig.THROW_EXCEPTION_ON_CLONED_REQUEST).toString()));
             if (isWrapped) {
                 load(b.request, b);
             } else {

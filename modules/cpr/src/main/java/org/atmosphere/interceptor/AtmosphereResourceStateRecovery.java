@@ -19,7 +19,9 @@ import org.atmosphere.cpr.Action;
 import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereInterceptor;
 import org.atmosphere.cpr.AtmosphereResource;
+import org.atmosphere.cpr.AtmosphereResourceEvent;
 import org.atmosphere.cpr.AtmosphereResourceEventImpl;
+import org.atmosphere.cpr.AtmosphereResourceEventListenerAdapter;
 import org.atmosphere.cpr.AtmosphereResourceImpl;
 import org.atmosphere.cpr.Broadcaster;
 import org.atmosphere.cpr.BroadcasterCache;
@@ -36,6 +38,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.atmosphere.cpr.ApplicationConfig.STATE_RECOVERY_TIMEOUT;
 
@@ -81,7 +84,7 @@ public class AtmosphereResourceStateRecovery implements AtmosphereInterceptor {
                     }
                 }
             }
-        }, timeout, timeout, TimeUnit.NANOSECONDS);
+        }, timeout, timeout, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -90,43 +93,63 @@ public class AtmosphereResourceStateRecovery implements AtmosphereInterceptor {
         if (!r.transport().equals(AtmosphereResource.TRANSPORT.POLLING)
                 && !r.transport().equals(AtmosphereResource.TRANSPORT.AJAX)) {
 
-            BroadcasterTracker tracker = track(r).tick();
-            List<Object> cachedMessages = new LinkedList<Object>();
-            for (String broadcasterID : tracker.ids()) {
-                Broadcaster b = factory.lookup(broadcasterID, false);
-                BroadcasterCache cache;
-                if (b != null && !b.getID().equalsIgnoreCase(r.getBroadcaster().getID())) {
-                    // We cannot add the resource now. we need to first make sure there is no cached message.
-                    cache = b.getBroadcasterConfig().getBroadcasterCache();
-                    List<Object> t = cache.retrieveFromCache(b.getID(), r);
+            final BroadcasterTracker tracker = track(r).tick();
 
-                    cachedMessages = b.getBroadcasterConfig().applyFilters(r, cachedMessages);
-                    logger.trace("Found Cached Messages For AtmosphereResource {} with Broadcaster {}", r.uuid(), broadcasterID);
-                    cachedMessages.addAll(t);
-                } else {
-                    logger.trace("Broadcaster {} is no longer available", broadcasterID);
-                }
-            }
-
+            List<Object> cachedMessages = retrieveCache(r, tracker, false);
             if (cachedMessages.size() > 0) {
-                try {
-                    r.getAtmosphereHandler().onStateChange(
-                            new AtmosphereResourceEventImpl(AtmosphereResourceImpl.class.cast(r), false, false, null)
-                                    .setMessage(cachedMessages));
-                } catch (IOException e) {
-                    logger.warn("Unable to recover from state recovery", e);
-                }
+                logger.trace("cached messages");
+                writeCache(r, cachedMessages);
                 return Action.CANCELLED;
-            }  else {
-                for (String broadcasterID : tracker.ids()) {
-                    Broadcaster b = factory.lookup(broadcasterID, false);
-                    if (b != null && !b.getID().equalsIgnoreCase(r.getBroadcaster().getID())) {
-                        logger.trace("Associate AtmosphereResource {} with Broadcaster {}", r.uuid(), broadcasterID);
-                        b.addAtmosphereResource(r);
-                    } else {
-                        logger.trace("Broadcaster {} is no longer available", broadcasterID);
+            } else {
+                r.addEventListener(new AtmosphereResourceEventListenerAdapter() {
+                    public void onSuspend(AtmosphereResourceEvent event) {
+                        logger.trace("onSuspend first");
+                        final AtomicBoolean doNotSuspend = new AtomicBoolean(false);
+                        /**
+                         * If a message gets broadcasted during the execution of the code below, we don't need to
+                         * suspend the connection. This code is needed to prevent the connection being suspended
+                         * with messages already written.
+                         */
+                        r.addEventListener(new AtmosphereResourceEventListenerAdapter() {
+                            @Override
+                            public void onBroadcast(AtmosphereResourceEvent event) {
+                                r.removeEventListener(this);
+                                doNotSuspend.set(true);
+                                logger.trace("onBroadcast");
+                            }
+                        });
+
+                        for (String broadcasterID : tracker.ids()) {
+                            Broadcaster b = factory.lookup(broadcasterID, false);
+                            if (b != null && !b.getID().equalsIgnoreCase(r.getBroadcaster().getID())) {
+                                logger.trace("Associate AtmosphereResource {} with Broadcaster {}", r.uuid(), broadcasterID);
+                                b.addAtmosphereResource(r);
+                            } else if (b == null) {
+                                logger.trace("Broadcaster {} is no longer available", broadcasterID);
+                            }
+                        }
+
+                        /**
+                         * Check the cache to see if messages has been added directly by using
+                         * {@link BroadcasterCache#addToCache(String, org.atmosphere.cpr.AtmosphereResource, org.atmosphere.cache.BroadcastMessage)}
+                         * after {@link Broadcaster#addAtmosphereResource(org.atmosphere.cpr.AtmosphereResource)} has been
+                         * invoked.
+                         */
+                        final List<Object> cachedMessages = retrieveCache(r, tracker, true);
+                        logger.trace("message size " + cachedMessages.size());
+                        if (cachedMessages.size() > 0) {
+                            logger.trace("About to write to the cache {}", r.uuid());
+                            writeCache(r, cachedMessages);
+                            doNotSuspend.set(true);
+                        }
+
+                        // Force doNotSuspend.
+                        if (doNotSuspend.get()) {
+                            AtmosphereResourceImpl.class.cast(r).action().type(Action.TYPE.CONTINUE);
+                        }
+                        logger.trace("doNotSuspend " + doNotSuspend.get());
                     }
-                }
+                });
             }
         }
         return Action.CONTINUE;
@@ -161,7 +184,7 @@ public class AtmosphereResourceStateRecovery implements AtmosphereInterceptor {
         public void onRemoveAtmosphereResource(Broadcaster b, AtmosphereResource r) {
             // We track cancelled and resumed connection only.
             BroadcasterTracker t = states.get(r.uuid());
-            if (t != null && !r.isCancelled() && !r.isResumed()) {
+            if (t != null && (r.getAtmosphereResourceEvent().isClosedByClient() || !r.isResumed())) {
                 t.remove(b);
             } else {
                 logger.trace("Keeping the state of {} with broadcaster {}", r.uuid(), b.getID());
@@ -216,4 +239,36 @@ public class AtmosphereResourceStateRecovery implements AtmosphereInterceptor {
         return "AtmosphereResource state recovery";
     }
 
+    public List<Object> retrieveCache(AtmosphereResource r, BroadcasterTracker tracker, boolean force) {
+        List<Object> cachedMessages = new LinkedList<Object>();
+        for (String broadcasterID : tracker.ids()) {
+            Broadcaster b = factory.lookup(broadcasterID, false);
+            BroadcasterCache cache;
+            if (force || (b != null && !b.getID().equalsIgnoreCase(r.getBroadcaster().getID()))) {
+                // We cannot add the resource now. we need to first make sure there is no cached message.
+                cache = b.getBroadcasterConfig().getBroadcasterCache();
+                List<Object> t = cache.retrieveFromCache(b.getID(), r);
+
+                cachedMessages = b.getBroadcasterConfig().applyFilters(r, cachedMessages);
+                if (t.size() > 0) {
+                    logger.trace("Found Cached Messages For AtmosphereResource {} with Broadcaster {}", r.uuid(), broadcasterID);
+                    cachedMessages.addAll(t);
+                }
+            } else {
+                logger.trace("Broadcaster {} is no longer available", broadcasterID);
+            }
+        }
+        return cachedMessages;
+    }
+
+    private void writeCache(AtmosphereResource r, List<Object> cachedMessages) {
+        try {
+            logger.trace("Writing cached messages {} for {}", cachedMessages, r.uuid());
+            r.getAtmosphereHandler().onStateChange(
+                    new AtmosphereResourceEventImpl(AtmosphereResourceImpl.class.cast(r), false, false, null)
+                            .setMessage(cachedMessages));
+        } catch (IOException e) {
+            logger.warn("Unable to recover from state recovery", e);
+        }
+    }
 }
