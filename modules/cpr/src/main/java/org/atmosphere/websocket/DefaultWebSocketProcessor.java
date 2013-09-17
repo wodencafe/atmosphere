@@ -21,11 +21,9 @@ import org.atmosphere.cpr.Action;
 import org.atmosphere.cpr.AsynchronousProcessor;
 import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereFramework;
-import org.atmosphere.cpr.AtmosphereHandler;
 import org.atmosphere.cpr.AtmosphereMappingException;
 import org.atmosphere.cpr.AtmosphereRequest;
 import org.atmosphere.cpr.AtmosphereResource;
-import org.atmosphere.cpr.AtmosphereResourceEvent;
 import org.atmosphere.cpr.AtmosphereResourceEventImpl;
 import org.atmosphere.cpr.AtmosphereResourceEventListener;
 import org.atmosphere.cpr.AtmosphereResourceFactory;
@@ -39,6 +37,7 @@ import org.atmosphere.util.VoidExecutorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.servlet.http.HttpServletRequest;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -88,26 +87,11 @@ public class DefaultWebSocketProcessor implements WebSocketProcessor, Serializab
     private ScheduledExecutorService scheduler;
     private final Map<String, WebSocketHandler> handlers = new ConcurrentHashMap<String, WebSocketHandler>();
     private final EndpointMapper<WebSocketHandler> mapper = new DefaultEndpointMapper<WebSocketHandler>();
-    private final AtmosphereHandler voidHandler = new AtmosphereHandler() {
-        @Override
-        public void onRequest(AtmosphereResource resource) throws IOException {
-        }
-
-        @Override
-        public void onStateChange(AtmosphereResourceEvent event) throws IOException {
-        }
-
-        @Override
-        public void destroy() {
-        }
-    };
     private boolean wildcardMapping = false;
     // 2MB - like maxPostSize
     private int byteBufferMaxSize = 2097152;
     private int charBufferMaxSize = 2097152;
 
-    private ByteBuffer bb = ByteBuffer.allocate(8192);
-    private CharBuffer cb = CharBuffer.allocate(8192);
 
     public DefaultWebSocketProcessor(AtmosphereFramework framework) {
         this.framework = framework;
@@ -138,6 +122,20 @@ public class DefaultWebSocketProcessor implements WebSocketProcessor, Serializab
         optimizeMapping();
     }
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean handshake(HttpServletRequest request) {
+        if (request != null) {
+            logger.trace("Processing request {}", request);
+        }
+        return true;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public WebSocketProcessor registerWebSocketHandler(String path, WebSocketHandler webSockethandler) {
         handlers.put(path, webSockethandler);
@@ -155,7 +153,7 @@ public class DefaultWebSocketProcessor implements WebSocketProcessor, Serializab
 
         // TODO: Fix this. Instead add an Interceptor.
         if (framework.getAtmosphereConfig().handlers().size() == 0) {
-            framework.addAtmosphereHandler("/*", voidHandler);
+            framework.addAtmosphereHandler("/*", AtmosphereFramework.REFLECTOR_ATMOSPHEREHANDLER);
         }
 
         request.headers(configureHeader(request)).setAttribute(WebSocket.WEBSOCKET_SUSPEND, true);
@@ -503,7 +501,11 @@ public class DefaultWebSocketProcessor implements WebSocketProcessor, Serializab
                 }
 
                 if (webSocket != null) {
-                    webSocket.resource(null);
+                    try {
+                        webSocket.resource(null).close(s);
+                    } catch (IOException e) {
+                        logger.trace("", e);
+                    }
                 }
             }
         }
@@ -562,10 +564,8 @@ public class DefaultWebSocketProcessor implements WebSocketProcessor, Serializab
                             WebSocketEventListener.class.cast(l).onHandshake(event);
                             break;
                         case CLOSE:
-                            if (Integer.class.getClass().isAssignableFrom(event.message().getClass())) {
-                                boolean isClosedByClient = Integer.class.cast(event.message()) == 1000 ? true : false;
-                                l.onDisconnect(new AtmosphereResourceEventImpl(r, !isClosedByClient, false, isClosedByClient, null));
-                            }
+                            boolean isClosedByClient = r.getAtmosphereResourceEvent().isClosedByClient();
+                            l.onDisconnect(new AtmosphereResourceEventImpl(r, !isClosedByClient, false, isClosedByClient, null));
                             WebSocketEventListener.class.cast(l).onDisconnect(event);
                             WebSocketEventListener.class.cast(l).onClose(event);
                             break;
@@ -598,10 +598,11 @@ public class DefaultWebSocketProcessor implements WebSocketProcessor, Serializab
 
     protected void dispatchStream(WebSocket webSocket, InputStream is) throws IOException {
         int read = 0;
+        ByteBuffer bb = webSocket.bb;
         while (read > -1) {
             bb.position(bb.position() + read);
             if (bb.remaining() == 0) {
-                resizeByteBuffer();
+                resizeByteBuffer(webSocket);
             }
             read = is.read(bb.array(), bb.position(), bb.remaining());
         }
@@ -615,10 +616,11 @@ public class DefaultWebSocketProcessor implements WebSocketProcessor, Serializab
 
     protected void dispatchReader(WebSocket webSocket, Reader r) throws IOException {
         int read = 0;
+        CharBuffer cb = webSocket.cb;
         while (read > -1) {
             cb.position(cb.position() + read);
             if (cb.remaining() == 0) {
-                resizeCharBuffer();
+                resizeCharBuffer(webSocket);
             }
             read = r.read(cb.array(), cb.position(), cb.remaining());
         }
@@ -630,8 +632,9 @@ public class DefaultWebSocketProcessor implements WebSocketProcessor, Serializab
         }
     }
 
-    private void resizeByteBuffer() throws IOException {
+    private void resizeByteBuffer(WebSocket webSocket) throws IOException {
         int maxSize = getByteBufferMaxSize();
+        ByteBuffer bb = webSocket.bb;
         if (bb.limit() >= maxSize) {
             throw new IOException("Message Buffer too small");
         }
@@ -645,11 +648,12 @@ public class DefaultWebSocketProcessor implements WebSocketProcessor, Serializab
         ByteBuffer newBuffer = ByteBuffer.allocate((int) newSize);
         bb.rewind();
         newBuffer.put(bb);
-        bb = newBuffer;
+        webSocket.bb = newBuffer;
     }
 
-    private void resizeCharBuffer() throws IOException {
+    private void resizeCharBuffer(WebSocket webSocket) throws IOException {
         int maxSize = getCharBufferMaxSize();
+        CharBuffer cb = webSocket.cb;
         if (cb.limit() >= maxSize) {
             throw new IOException("Message Buffer too small");
         }
@@ -663,7 +667,7 @@ public class DefaultWebSocketProcessor implements WebSocketProcessor, Serializab
         CharBuffer newBuffer = CharBuffer.allocate((int) newSize);
         cb.rewind();
         newBuffer.put(cb);
-        cb = newBuffer;
+        webSocket.cb = newBuffer;
     }
 
     /**

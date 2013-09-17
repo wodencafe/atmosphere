@@ -18,6 +18,7 @@ package org.atmosphere.cpr;
 import org.atmosphere.client.TrackMessageSizeInterceptor;
 import org.atmosphere.interceptor.AtmosphereResourceLifecycleInterceptor;
 import org.atmosphere.interceptor.AtmosphereResourceStateRecovery;
+import org.atmosphere.interceptor.SSEAtmosphereInterceptor;
 import org.atmosphere.util.EndpointMapper;
 import org.atmosphere.websocket.WebSocketProcessor;
 import org.atmosphere.websocket.WebSocketProtocol;
@@ -430,9 +431,9 @@ public interface ApplicationConfig {
      * The default content-type value used when Atmosphere requires one.
      * <p>
      * Default: "text/plain"<br>
-     * Value: org.atmosphere.cpr.defaultContextType
+     * Value: org.atmosphere.cpr.defaultContentType
      */
-    String DEFAULT_CONTENT_TYPE = ApplicationConfig.class.getPackage().getName() + ".defaultContextType";
+    String DEFAULT_CONTENT_TYPE = ApplicationConfig.class.getPackage().getName() + ".defaultContentType";
     /**
      * A list of {@link AtmosphereInterceptor} class name that will be invoked before the {@link AtmosphereResource}
      * gets delivered to an application or framework.
@@ -585,5 +586,32 @@ public interface ApplicationConfig {
      * Value: MUST be set using System's properties: org.atmosphere.cpr.jsr356.pathMappingLength"
      */
     String JSR356_PATH_MAPPING_LENGTH = ApplicationConfig.class.getName() + ".jsr356.pathMappingLength";
+    /**
+     * Default Server Side Event content type.
+     * Default: text/event-stream
+     * Value: org.atmosphere.interceptor.SSEAtmosphereInterceptor.contentType
+     */
+    String SSE_DEFAULT_CONTENTTYPE = SSEAtmosphereInterceptor.class.getName() + ".contentType";
+    /**
+     * A list, separated by comma, of package name to scan when looking for @AtmosphereAnnotation custom Annotation.
+     * <p>
+     * Default: ""<br>
+     * Value: org.atmosphere.annotation.packages
+     */
+    String CUSTOM_ANNOTATION_PACKAGE = "org.atmosphere.annotation.packages";
+    /**
+     * Set to false if you want Atmosphere to scan the entire classpath looking for annotation.
+     * <p>
+     * Default: true<br>
+     * Value: org.atmosphere.cpr.scanClassPath
+     */
+    String SCAN_CLASSPATH = ApplicationConfig.class.getName() + ".scanClassPath";
+    /**
+     * Use a build in {@link javax.servlet.http.HttpSession} when using native WebSocket implementation.
+     * <p>
+     * Default: false<br>
+     * Value: org.atmosphere.cpr.useBuildInSession
+     */
+    String BUILT_IN_SESSION = ApplicationConfig.class.getName() + ".useBuildInSession";
 }
 

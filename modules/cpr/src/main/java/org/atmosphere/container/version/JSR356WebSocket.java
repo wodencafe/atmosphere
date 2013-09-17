@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Jeanfrancois Arcand
+ * Copyright 2013 Jeanfrancois Arcand
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -48,7 +48,7 @@ public class JSR356WebSocket extends WebSocket {
     @Override
     public WebSocket write(String s) throws IOException {
         try {
-            session.getBasicRemote().sendText(s);
+            session.getAsyncRemote().sendText(s);
         } catch (NullPointerException e) {
             patchGlassFish(e);
         }
@@ -58,7 +58,7 @@ public class JSR356WebSocket extends WebSocket {
     @Override
     public WebSocket write(byte[] data, int offset, int length) throws IOException {
         try {
-            session.getBasicRemote().sendBinary(ByteBuffer.wrap(data, offset, length));
+            session.getAsyncRemote().sendBinary(ByteBuffer.wrap(data, offset, length));
         } catch (NullPointerException e) {
             patchGlassFish(e);
         }

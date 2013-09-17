@@ -41,6 +41,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
+import java.net.InetSocketAddress;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -54,6 +55,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.Callable;
 
 import static org.atmosphere.cpr.HeaderConfig.X_ATMOSPHERE;
 
@@ -68,7 +70,7 @@ import static org.atmosphere.cpr.HeaderConfig.X_ATMOSPHERE;
  */
 public class AtmosphereRequest extends HttpServletRequestWrapper {
 
-    private Logger logger = LoggerFactory.getLogger(AtmosphereRequest.class);
+    private final static Logger logger = LoggerFactory.getLogger(AtmosphereRequest.class);
     private ServletInputStream bis;
     private BufferedReader br;
     private final Builder b;
@@ -140,7 +142,18 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
      */
     @Override
     public String getQueryString() {
-        return b.queryString != "" ? b.queryString : isNotNoOps() ? b.request.getQueryString() : "";
+        return b.queryString != "" ? b.queryString : isNotNoOps() ? b.request.getQueryString() : toQs();
+    }
+
+    private String toQs() {
+        StringBuilder q = new StringBuilder();
+        for (Map.Entry<String, String[]> e : b.queryStrings.entrySet()) {
+            for (String k : e.getValue()) {
+                q.append(e.getKey()).append("=").append(k).append("&");
+            }
+        }
+        if (q.length() > 0) q.deleteCharAt(q.length() - 1);
+        return q.toString();
     }
 
     /**
@@ -267,11 +280,10 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
      */
     @Override
     public Enumeration<String> getHeaderNames() {
-        ArrayList list = Collections.list(b.request.getHeaderNames());
-        if (b.contentType != null) {
-            list.add("Content-Type");
-        }
+        Set list = new HashSet();
+        list.addAll(b.headers.keySet());
 
+        list.addAll(Collections.list(b.request.getHeaderNames()));
         if (b.request != null) {
             Enumeration e = b.request.getAttributeNames();
             while (e.hasMoreElements()) {
@@ -281,8 +293,6 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
                 }
             }
         }
-
-        list.addAll(b.headers.keySet());
 
         return Collections.enumeration(list);
     }
@@ -745,7 +755,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
      */
     @Override
     public String getRemoteAddr() {
-        return isNotNoOps() ? b.request.getRemoteAddr() : b.remoteAddr;
+        return isNotNoOps() ? b.request.getRemoteAddr() : b.lazyRemote != null ? b.lazyRemote.getHostAddress() : b.remoteAddr;
     }
 
     /**
@@ -753,7 +763,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
      */
     @Override
     public String getRemoteHost() {
-        return isNotNoOps() ? b.request.getRemoteHost() : b.remoteHost;
+        return isNotNoOps() ? b.request.getRemoteHost() : b.lazyRemote != null ? b.lazyRemote.getHostName() : b.remoteHost;
     }
 
     /**
@@ -761,7 +771,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
      */
     @Override
     public int getRemotePort() {
-        return isNotNoOps() ? b.request.getRemotePort() : b.remotePort;
+        return isNotNoOps() ? b.request.getRemotePort() : b.lazyRemote != null ? b.lazyRemote.getPort() : b.remotePort;
     }
 
     /**
@@ -833,7 +843,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
      */
     @Override
     public String getLocalName() {
-        return isNotNoOps() ? b.request.getLocalName() : b.localName;
+        return isNotNoOps() ? b.request.getLocalName() : b.lazyLocal != null ? b.lazyLocal.getHostName() : b.localName;
     }
 
     /**
@@ -841,7 +851,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
      */
     @Override
     public int getLocalPort() {
-        return isNotNoOps() ? b.request.getLocalPort() : b.localPort;
+        return isNotNoOps() ? b.request.getLocalPort() : b.lazyLocal != null ? b.lazyLocal.getPort() :b.localPort;
     }
 
     /**
@@ -849,7 +859,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
      */
     @Override
     public String getLocalAddr() {
-        return isNotNoOps() ? b.request.getLocalAddr() : b.localAddr;
+        return isNotNoOps() ? b.request.getLocalAddr() : b.lazyLocal != null ? b.lazyLocal.getHostAddress() : b.localAddr;
     }
 
     private boolean isNotNoOps() {
@@ -1009,6 +1019,9 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
         private HttpSession webSocketFakeSession;
         private String queryString = "";
         private boolean isSecure = false;
+        // Callable to lazily execute.
+        private LazyComputation lazyRemote = null;
+        private LazyComputation lazyLocal = null;
 
         public Builder() {
         }
@@ -1060,6 +1073,16 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
 
         public Builder localPort(int localPort) {
             this.localPort = localPort;
+            return this;
+        }
+
+        public Builder remoteInetSocketAddress(Callable remoteAddr) {
+            this.lazyRemote = new LazyComputation(remoteAddr);
+            return this;
+        }
+
+        public Builder localInetSocketAddress(Callable localAddr) {
+            this.lazyLocal = new LazyComputation(localAddr);
             return this;
         }
 
@@ -1244,6 +1267,13 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
 
         private boolean throwExceptionOnCloned;
         public HttpSession fake;
+        private final static Enumeration<String> EMPTY_ENUM_STRING = Collections.enumeration(Collections.<String>emptyList());
+        private final static Enumeration<Locale> EMPTY_ENUM_LOCALE = Collections.enumeration(Collections.<Locale>emptyList());
+        private final static List<Part> EMPTY_ENUM_PART = Collections.<Part>emptyList();
+        private final static Map<String, String[]> EMPTY_MAP_STRING = Collections.<String, String[]>emptyMap();
+        private final static String[] EMPTY_ARRAY = new String[0];
+        private final StringBuffer EMPTY_STRING_BUFFER = new StringBuffer();
+        private final static Cookie[] EMPTY_COOKIE = new Cookie[0];
 
         public NoOpsRequest() {
             this.throwExceptionOnCloned = false;
@@ -1270,7 +1300,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
 
         @Override
         public Cookie[] getCookies() {
-            return new Cookie[0];
+            return EMPTY_COOKIE;
         }
 
         @Override
@@ -1285,12 +1315,12 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
 
         @Override
         public Enumeration<String> getHeaderNames() {
-            return Collections.enumeration(Collections.<String>emptyList());
+            return EMPTY_ENUM_STRING;
         }
 
         @Override
         public Enumeration<String> getHeaders(String name) {
-            return Collections.enumeration(Collections.<String>emptyList());
+            return EMPTY_ENUM_STRING;
         }
 
         @Override
@@ -1310,7 +1340,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
 
         @Override
         public Collection<Part> getParts() throws IOException, ServletException {
-            return Collections.<Part>emptyList();
+            return EMPTY_ENUM_PART;
         }
 
         @Override
@@ -1340,12 +1370,12 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
 
         @Override
         public String getRequestURI() {
-            return "";
+            return "/";
         }
 
         @Override
         public StringBuffer getRequestURL() {
-            return new StringBuffer();
+            return EMPTY_STRING_BUFFER;
         }
 
         @Override
@@ -1431,7 +1461,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
 
         @Override
         public Enumeration<String> getAttributeNames() {
-            return Collections.enumeration(Collections.<String>emptyList());
+            return EMPTY_ENUM_STRING;
         }
 
         @Override
@@ -1446,7 +1476,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
 
         @Override
         public String getContentType() {
-            return null;
+            return "text/plain";
         }
 
         @Override
@@ -1466,7 +1496,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
 
         @Override
         public Enumeration<Locale> getLocales() {
-            return Collections.enumeration(Collections.<Locale>emptyList());
+            return EMPTY_ENUM_LOCALE;
         }
 
         @Override
@@ -1491,17 +1521,17 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
 
         @Override
         public Map<String, String[]> getParameterMap() {
-            return Collections.<String, String[]>emptyMap();
+            return EMPTY_MAP_STRING;
         }
 
         @Override
         public Enumeration<String> getParameterNames() {
-            return Collections.enumeration(Collections.<String>emptyList());
+            return EMPTY_ENUM_STRING;
         }
 
         @Override
         public String[] getParameterValues(String name) {
-            return new String[0];
+            return EMPTY_ARRAY;
         }
 
         @Override
@@ -1541,7 +1571,7 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
 
         @Override
         public String getScheme() {
-            return "WebSocket";
+            return "ws";
         }
 
         @Override
@@ -1704,6 +1734,40 @@ public class AtmosphereRequest extends HttpServletRequestWrapper {
         while (l.hasMoreElements()) {
             b.locale(l.nextElement());
         }
+    }
+
+    private static final class LazyComputation {
+
+        private final Callable<InetSocketAddress> callable;
+        private InetSocketAddress address;
+
+        public LazyComputation(Callable<InetSocketAddress> callable) {
+            this.callable = callable;
+        }
+
+        public InetSocketAddress address() {
+            if (address == null) {
+                try {
+                    address = callable.call();
+                } catch (Exception e) {
+                    logger.warn("", e);
+                }
+            }
+            return address;
+        }
+
+        public int getPort() {
+            return address().getPort();
+        }
+
+        public String getHostAddress() {
+            return address().getAddress().getHostAddress();
+        }
+
+        public String getHostName() {
+            return address().getHostName();
+        }
+
     }
 
     @Override

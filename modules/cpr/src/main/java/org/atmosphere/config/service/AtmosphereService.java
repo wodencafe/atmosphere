@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Jeanfrancois Arcand
+ * Copyright 2013 Jeanfrancois Arcand
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -36,7 +36,11 @@ import java.lang.annotation.Target;
  * Atmosphere's components like {@link Broadcaster}, {@link AtmosphereInterceptor}, etc.
  *
  * This annotation doesn't install any Atmosphere Component like {@link ManagedService}, {@link org.atmosphere.cpr.AtmosphereHandler}
- * or {@link org.atmosphere.websocket.WebSocketHandler}. The framework supporting the annotation must deploy itself an Atmosphere's Service.
+ * or {@link org.atmosphere.websocket.WebSocketHandler}. The framework supporting the annotation must deploy itself an Atmosphere's Service or
+ * When specified, The {@link #servlet()} returned value will be used to install a
+ * {@link org.atmosphere.handler.ReflectorServletProcessor} that will dispatch requests to the {@link javax.servlet.Servlet}. You can
+ * customize the request dispatch bu setting the {@link #dispatch()} to false. When set to false, the {@link org.atmosphere.handler.ReflectorServletProcessor#onRequest(org.atmosphere.cpr.AtmosphereResource)}
+ * will never be invoked.
  */
 @Target({ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
@@ -64,7 +68,7 @@ public @interface AtmosphereService {
      */
     Class<? extends AtmosphereInterceptor>[] interceptors() default {
             TrackMessageSizeInterceptor.class,
-            HeartbeatInterceptor.class,
+            HeartbeatInterceptor.class
     };
 
     /**
@@ -81,4 +85,23 @@ public @interface AtmosphereService {
      * @return The {@link org.atmosphere.cpr.Broadcaster} class name. Default is {@link org.atmosphere.cache.UUIDBroadcasterCache}
      */
     Class<? extends BroadcasterCache> broadcasterCache() default UUIDBroadcasterCache.class;
+
+    /**
+     * The Servlet instance to instantiate at startup.
+     */
+    String servlet() default "";
+
+    /**
+     * The Servlet path  instance to instantiate at startup.
+     */
+    String path() default "/";
+
+    /**
+     * Dispatch the managed {@link org.atmosphere.cpr.AtmosphereResource} to the mapped
+     * {@link org.atmosphere.cpr.AtmosphereHandler#onRequest(org.atmosphere.cpr.AtmosphereResource)}. If set to false, all
+     * HTTP Get operation will not invoke the {@link org.atmosphere.handler.ReflectorServletProcessor#onRequest(org.atmosphere.cpr.AtmosphereResource)}.
+     * The HTTP method can be customized using {@link org.atmosphere.cpr.ApplicationConfig#ATMOSPHERERESOURCE_INTERCEPTOR_METHOD} value via
+     * {@link #atmosphereConfig}.  If the {@link #servlet()} is undefined, changing that value has no effect.
+     */
+    boolean dispatch() default true;
 }

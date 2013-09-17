@@ -15,11 +15,20 @@
  */
 package org.atmosphere.interceptor;
 
-import org.atmosphere.cpr.*;
+import org.atmosphere.cpr.Action;
+import org.atmosphere.cpr.AsyncIOInterceptorAdapter;
+import org.atmosphere.cpr.AsyncIOWriter;
+import org.atmosphere.cpr.AtmosphereInterceptorAdapter;
+import org.atmosphere.cpr.AtmosphereInterceptorWriter;
+import org.atmosphere.cpr.AtmosphereRequest;
+import org.atmosphere.cpr.AtmosphereResource;
+import org.atmosphere.cpr.AtmosphereResponse;
+import org.atmosphere.cpr.HeaderConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 /**
  * JSONP Transport Support.
@@ -29,10 +38,11 @@ import java.io.IOException;
 public class JSONPAtmosphereInterceptor extends AtmosphereInterceptorAdapter {
 
     private static final Logger logger = LoggerFactory.getLogger(JSONPAtmosphereInterceptor.class);
+    private static final String END_CHUNK = "\"});";
+    private static final Object START_CHUNK = "({\"message\" : \"";
 
     @Override
     public Action inspect(AtmosphereResource r) {
-
         final AtmosphereRequest request = r.getRequest();
         final AtmosphereResponse response = r.getResponse();
         if (r.transport().equals(AtmosphereResource.TRANSPORT.JSONP)) {
@@ -42,19 +52,6 @@ public class JSONPAtmosphereInterceptor extends AtmosphereInterceptorAdapter {
             if (AtmosphereInterceptorWriter.class.isAssignableFrom(writer.getClass())) {
                 AtmosphereInterceptorWriter.class.cast(writer).interceptor(new AsyncIOInterceptorAdapter() {
 
-                    String contentType() {
-                        String c = response.getContentType();
-                        if (c == null) {
-                            c = (String) request.getAttribute(FrameworkConfig.EXPECTED_CONTENT_TYPE);
-                        }
-
-                        if (c == null) {
-                            c = request.getContentType();
-                        }
-
-                        return c;
-                    }
-
                     String callbackName() {
                         return request.getParameter(HeaderConfig.JSONP_CALLBACK_NAME);
                     }
@@ -62,23 +59,26 @@ public class JSONPAtmosphereInterceptor extends AtmosphereInterceptorAdapter {
                     @Override
                     public void prePayload(AtmosphereResponse response, byte[] data, int offset, int length) {
                         String callbackName = callbackName();
-                        String contentType = contentType();
+                        response.write(callbackName + START_CHUNK);
+                    }
 
-                        response.write(callbackName + "({\"message\" : ");
-                        if (contentType != null && !contentType.contains("json")) {
-                            response.write("\"", true);
+                    @Override
+                    public byte[] transformPayload(AtmosphereResponse response, byte[] responseDraft, byte[] data) throws IOException {
+                        if (Arrays.binarySearch(responseDraft, (byte) 0x22) != -1) {
+                            String charEncoding = response.getCharacterEncoding() == null ? "UTF-8" : response.getCharacterEncoding();
+                            // TODO: TOTALLY INEFFICIENT. We MUST uses binary replacement instead.
+                            String s = new String(responseDraft, charEncoding);
+                            return s.replaceAll("(['\"\\/])", "\\\\$1")
+                            .replaceAll("\b", "\\\\b").replaceAll("\n", "\\\\n")
+                            .replaceAll("\t", "\\\\t").replaceAll("\f", "\\\\f")
+                            .replaceAll("\r", "\\\\r").getBytes(charEncoding);
                         }
+                        return responseDraft;
                     }
 
                     @Override
                     public void postPayload(AtmosphereResponse response, byte[] data, int offset, int length) {
-                        String contentType = contentType();
-
-                        if (contentType != null && !contentType.contains("json")) {
-                            response.write("\"", true);
-                        }
-
-                        response.write("});", true);
+                        response.write(END_CHUNK, true);
                     }
                 });
             } else {

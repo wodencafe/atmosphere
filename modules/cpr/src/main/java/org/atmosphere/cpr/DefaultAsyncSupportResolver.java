@@ -92,7 +92,7 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
     public final static String SERVLET_30 = "javax.servlet.AsyncListener";
     public final static String GLASSFISH_V2 = "com.sun.enterprise.web.PEWebContainer";
     public final static String TOMCAT_7 = "org.apache.catalina.comet.CometFilterChain";
-    public final static String TOMCAT_WEBSOCKET = "org.apache.catalina.websocket.WebSocketServlet";
+    public final static String TOMCAT_WEBSOCKET = "org.apache.coyote.http11.upgrade.UpgradeInbound";
     public final static String TOMCAT = "org.apache.coyote.http11.Http11NioProcessor";
     public final static String JBOSS_5 = "org.jboss.";
     public final static String JETTY = "org.mortbay.util.ajax.Continuation";
@@ -187,9 +187,6 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
                     if (testClassExists(JSR356_WEBSOCKET))
                         add(JSR356AsyncSupport.class);
 
-                    if (testClassExists(JBOSS_AS7_WEBSOCKET))
-                        add(JBossWebSocketSupport.class);
-
                     if (testClassExists(TOMCAT_WEBSOCKET))
                         add(Tomcat7Servlet30SupportWithWebSocket.class);
 
@@ -205,6 +202,9 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
                     if (testClassExists(TOMCAT_WEBSOCKET))
                         add(Tomcat7AsyncSupportWithWebSocket.class);
 
+                    if (testClassExists(JETTY_9))
+                        add(Jetty9AsyncSupportWithWebSocket.class);
+
                     if (testClassExists(JETTY_8))
                         add(JettyAsyncSupportWithWebSocket.class);
 
@@ -213,6 +213,9 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
 
                     if (testClassExists(GRIZZLY2_WEBSOCKET))
                         add(Grizzly2WebSocketSupport.class);
+
+                    if (testClassExists(JBOSS_AS7_WEBSOCKET))
+                        add(JBossWebSocketSupport.class);
                 }
             }
         };
@@ -297,7 +300,7 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
 
         if (cs == null) {
             AsyncSupport nativeSupport = resolveNativeCometSupport(detectContainersPresent());
-            return nativeSupport == null ? new BlockingIOCometSupport(config) : nativeSupport;
+            return nativeSupport == null ? defaultCometSupport(defaultToBlocking) : nativeSupport;
         } else {
             return cs;
         }

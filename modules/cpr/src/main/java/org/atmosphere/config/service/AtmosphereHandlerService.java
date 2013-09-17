@@ -17,6 +17,7 @@ package org.atmosphere.config.service;
 
 import org.atmosphere.cache.DefaultBroadcasterCache;
 import org.atmosphere.cpr.AtmosphereInterceptor;
+import org.atmosphere.cpr.AtmosphereResourceEventListener;
 import org.atmosphere.cpr.BroadcastFilter;
 import org.atmosphere.cpr.Broadcaster;
 import org.atmosphere.cpr.BroadcasterCache;
@@ -83,9 +84,16 @@ public @interface AtmosphereHandlerService {
     Class<? extends AtmosphereInterceptor>[] interceptors() default {};
 
     /**
-     * The {@link org.atmosphere.cpr.BroadcasterCache} class name
-     *
-     * @return The {@link org.atmosphere.cpr.Broadcaster} class name
+      * The {@link org.atmosphere.cpr.BroadcasterCache} class name. By default, a no ops {@link DefaultBroadcasterCache}
+      * is installed. It is strongly recommend to install the {@link org.atmosphere.cache.UUIDBroadcasterCache} to prevent
+      * message being lost.
+      *
+      * @return The {@link org.atmosphere.cpr.Broadcaster} class name
+      */
+     Class<? extends BroadcasterCache> broadcasterCache() default DefaultBroadcasterCache.class;
+
+    /**
+     * Add {@link org.atmosphere.cpr.AtmosphereResourceEventListener} to track internal events.
      */
-    Class<? extends BroadcasterCache> broadcasterCache() default DefaultBroadcasterCache.class;
+    public Class<? extends AtmosphereResourceEventListener>[] listeners() default {};
 }

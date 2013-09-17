@@ -114,7 +114,7 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
                         long l = (Long) req.getAttribute(MAX_INACTIVE);
                         if (l > 0 && System.currentTimeMillis() - l > maxInactiveTime) {
                             try {
-                                logger.debug("Close detector disconnecting {}. Current size {}", req.resource(), aliveRequests.size());
+                                logger.trace("Close detector disconnecting {}. Current size {}", req.resource(), aliveRequests.size());
                                 AtmosphereResourceImpl r = (AtmosphereResourceImpl) aliveRequests.remove(req);
                                 cancelled(req, r.getResponse(false));
                             } catch (Throwable e) {
@@ -184,8 +184,8 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
         }
 
         if (config.handlers().isEmpty()) {
-            logger.error("No AtmosphereHandler found. Make sure you define it inside WEB-INF/atmosphere.xml or annotate using @AtmosphereHandlerService");
-            throw new AtmosphereMappingException("No AtmosphereHandler found. Make sure you define it inside WEB-INF/atmosphere.xml or annotate using @AtmosphereHandlerService");
+            logger.error("No AtmosphereHandler found. Make sure you define it inside WEB-INF/atmosphere.xml or annotate using @___Service");
+            throw new AtmosphereMappingException("No AtmosphereHandler found. Make sure you define it inside WEB-INF/atmosphere.xml or annotate using @___Service");
         }
 
         if (res.request() == null) {
@@ -195,7 +195,7 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
         if (supportSession()) {
             // Create the session needed to support the Resume
             // operation from disparate requests.
-            HttpSession session = req.getSession(true);
+            req.getSession(true);
         }
 
         req.setAttribute(FrameworkConfig.SUPPORT_SESSION, supportSession());
@@ -246,7 +246,7 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
         postInterceptors(handlerWrapper.interceptors, resource);
         postInterceptors(config.framework().interceptors(), resource);
 
-        if (trackActiveRequest && resource.getAtmosphereResourceEvent().isSuspended() && req.getAttribute(FrameworkConfig.CANCEL_SUSPEND_OPERATION) == null) {
+        if (trackActiveRequest && resource.isSuspended() && req.getAttribute(FrameworkConfig.CANCEL_SUSPEND_OPERATION) == null) {
             req.setAttribute(MAX_INACTIVE, System.currentTimeMillis());
             aliveRequests.put(req, resource);
         }

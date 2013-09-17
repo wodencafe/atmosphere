@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Jeanfrancois Arcand
+ * Copyright 2013 Jeanfrancois Arcand
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -16,8 +16,7 @@
 package org.atmosphere.interceptor;
 
 import org.atmosphere.cpr.Action;
-import org.atmosphere.cpr.AtmosphereConfig;
-import org.atmosphere.cpr.AtmosphereInterceptor;
+import org.atmosphere.cpr.AtmosphereInterceptorAdapter;
 import org.atmosphere.cpr.AtmosphereResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,31 +24,22 @@ import org.slf4j.LoggerFactory;
 /**
  * Add proper header for Nginx's buffering http://wiki.nginx.org/HttpProxyModule#proxy_buffering
  * <br/>
- * This interceptor set the X-Accel-Buffering : No on the {@link org.atmosphere.cpr.AtmosphereResponse} before it gets suspended.
+ * This interceptor set the 'X-Accel-Buffering : No' on the {@link org.atmosphere.cpr.AtmosphereResponse} before it gets suspended.
  *
  * @author Jeanfrancois Arcand
  */
-public class NginxInterceptor implements AtmosphereInterceptor {
+public class NginxInterceptor extends AtmosphereInterceptorAdapter {
 
-    private final Logger logger = LoggerFactory.getLogger(NginxInterceptor.class);
-
-    @Override
-    public void configure(AtmosphereConfig config) {
-
-    }
+    private final static Logger logger = LoggerFactory.getLogger(NginxInterceptor.class);
 
     @Override
     public Action inspect(AtmosphereResource r) {
         try {
             r.getResponse().addHeader("X-Accel-Buffering", "No");
         } catch (Throwable t) {
-            // For whatever reason, catch it
+            logger.trace("", t);
         }
         return Action.CONTINUE;
-    }
-
-    @Override
-    public void postInspect(AtmosphereResource r) {
     }
 
 }

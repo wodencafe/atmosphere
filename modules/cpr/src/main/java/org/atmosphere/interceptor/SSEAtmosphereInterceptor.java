@@ -16,8 +16,10 @@
 package org.atmosphere.interceptor;
 
 import org.atmosphere.cpr.Action;
+import org.atmosphere.cpr.ApplicationConfig;
 import org.atmosphere.cpr.AsyncIOInterceptorAdapter;
 import org.atmosphere.cpr.AsyncIOWriter;
+import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereInterceptorAdapter;
 import org.atmosphere.cpr.AtmosphereInterceptorWriter;
 import org.atmosphere.cpr.AtmosphereResource;
@@ -33,6 +35,7 @@ import java.io.PrintWriter;
 
 import static org.atmosphere.cpr.ApplicationConfig.PROPERTY_USE_STREAM;
 import static org.atmosphere.cpr.FrameworkConfig.CALLBACK_JAVASCRIPT_PROTOCOL;
+import static org.atmosphere.cpr.FrameworkConfig.CONTAINER_RESPONSE;
 
 /**
  * HTML 5 Server Side Events implementation.
@@ -46,6 +49,7 @@ public class SSEAtmosphereInterceptor extends AtmosphereInterceptorAdapter {
     private static final byte[] padding;
     private static final String paddingText;
     private static final byte[] END = "\n\n".getBytes();
+    private String contentType = "text/event-stream";
 
     static {
         StringBuffer whitespace = new StringBuffer();
@@ -57,10 +61,18 @@ public class SSEAtmosphereInterceptor extends AtmosphereInterceptorAdapter {
         padding = paddingText.getBytes();
     }
 
+    @Override
+    public void configure(AtmosphereConfig config) {
+        String s = config.getInitParameter(ApplicationConfig.SSE_DEFAULT_CONTENTTYPE);
+        if (s != null) {
+            contentType = s;
+        }
+    }
+
     private boolean writePadding(AtmosphereResponse response) {
         if (response.request() != null && response.request().getAttribute("paddingWritten") != null) return false;
 
-        response.setContentType("text/event-stream");
+        response.setContentType(contentType);
         response.setCharacterEncoding("utf-8");
         boolean isUsingStream = (Boolean) response.request().getAttribute(PROPERTY_USE_STREAM);
         if (isUsingStream) {
@@ -139,7 +151,8 @@ public class SSEAtmosphereInterceptor extends AtmosphereInterceptorAdapter {
                     public void postPayload(AtmosphereResponse response, byte[] data, int offset, int length) {
                         // The CALLBACK_JAVASCRIPT_PROTOCOL may be called by a framework running on top of Atmosphere
                         // In that case, we must pad/protocol indenendently of the state of the AtmosphereResource
-                        if (r.isSuspended() || r.getRequest().getAttribute(CALLBACK_JAVASCRIPT_PROTOCOL) != null) {
+                        if (r.isSuspended() || r.getRequest().getAttribute(CALLBACK_JAVASCRIPT_PROTOCOL) != null
+                                || r.getRequest().getAttribute(CONTAINER_RESPONSE) != null) {
                             response.write(END, true);
                         }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Jeanfrancois Arcand
+ * Copyright 2013 Jeanfrancois Arcand
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -15,30 +15,37 @@
  */
 package org.atmosphere.cache;
 
-import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereResource;
 import org.atmosphere.cpr.BroadcasterCache;
+import org.atmosphere.cpr.BroadcasterConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.List;
 
 public class DefaultBroadcasterCache implements BroadcasterCache {
+    private static final Logger logger = LoggerFactory.getLogger(DefaultBroadcasterCache.class);
+
     @Override
     public void start() {
-
     }
 
     @Override
     public void stop() {
-
     }
 
     @Override
-    public void configure(AtmosphereConfig config) {
+    public void cleanup() {
+    }
+
+    @Override
+    public void configure(BroadcasterConfig config) {
     }
 
     @Override
     public CacheMessage addToCache(String broadcasterId, AtmosphereResource r, BroadcastMessage e) {
+        logger.trace("Message {} will be lost! Please install a proper BroadcasterCache", e.message);
         return null;
     }
 

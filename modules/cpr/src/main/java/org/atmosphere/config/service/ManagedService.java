@@ -17,7 +17,6 @@ package org.atmosphere.config.service;
 
 import org.atmosphere.cache.UUIDBroadcasterCache;
 import org.atmosphere.client.TrackMessageSizeInterceptor;
-import org.atmosphere.config.managed.AnnotationServiceInterceptor;
 import org.atmosphere.cpr.AtmosphereInterceptor;
 import org.atmosphere.cpr.AtmosphereResourceEventListener;
 import org.atmosphere.cpr.BroadcastFilter;
@@ -39,24 +38,25 @@ import java.lang.annotation.Target;
  * <ul>
  *     <li>The {@link org.atmosphere.cache.UUIDBroadcasterCache}for caching message. </li>
  *     <li>The {@link org.atmosphere.interceptor.AtmosphereResourceLifecycleInterceptor} for managing the connection lifecycle</li>
- *     <li>The {@link org.atmosphere.interceptor.BroadcastOnPostAtmosphereInterceptor} for pushing messages to suspended connection</li>
  *     <li>The {@link org.atmosphere.client.TrackMessageSizeInterceptor} for making sure messages are delivered entirely</li>
  *     <li>The {@link org.atmosphere.interceptor.HeartbeatInterceptor} for keeping the connection active</li>
- *     <li>The {@link org.atmosphere.interceptor.OnDisconnectInterceptor} for detecting  when the connection get closed by the browser</li>
- *     <li>The {@link org.atmosphere.interceptor.JavaScriptProtocol} to enable the Atmosphere protocol between the client and Atmosphere</li>
+ *     <li>The {@link org.atmosphere.interceptor.HeartbeatInterceptor} for keeping the connection active</li>
  * </ul>
  *
  * Annotating your {@link org.atmosphere.cpr.AtmosphereHandler} is the same as doing:
- * <blockquote>
+ * <pre><blockquote>
  @AtmosphereHandlerService(
         path = "/chat",
         broadcasterCache = UUIDBroadcasterCache.class,
-        interceptors = {AtmosphereResourceLifecycleInterceptor.class,
-        BroadcastOnPostAtmosphereInterceptor.class,
-        TrackMessageSizeInterceptor.class,
-        HeartbeatInterceptor.class})
- * </blockquote>
+        interceptors = {
+            AtmosphereResourceLifecycleInterceptor.class,
+            TrackMessageSizeInterceptor.class,
+            HeartbeatInterceptor.class,
+            SuspendTrackerInterceptor.class,
+            AnnotationServiceInterceptor.class})
+ * </blockquote></pre>
  *
+ * This annotation can be used with @Get, @Post, @Delete, @Ready, @Singleton and @Resume
  * @author Jeanfrancois Arcand
  */
 @Target({ElementType.TYPE})
@@ -84,15 +84,13 @@ public @interface ManagedService {
 
     /**
      * A list of {@link org.atmosphere.cpr.AtmosphereInterceptor} to install. Default are {@link AtmosphereResourceLifecycleInterceptor}
-     * , {@link org.atmosphere.config.managed.AnnotationServiceInterceptor}, {@link TrackMessageSizeInterceptor}, {@link HeartbeatInterceptor}  and {@link SuspendTrackerInterceptor}
+     * , {@link org.atmosphere.config.managed.ManagedServiceInterceptor}, {@link TrackMessageSizeInterceptor}, {@link HeartbeatInterceptor}  and {@link SuspendTrackerInterceptor}
      */
     Class<? extends AtmosphereInterceptor>[] interceptors() default {
             AtmosphereResourceLifecycleInterceptor.class,
             TrackMessageSizeInterceptor.class,
             HeartbeatInterceptor.class,
-            SuspendTrackerInterceptor.class,
-            AnnotationServiceInterceptor.class
-
+            SuspendTrackerInterceptor.class
     };
 
     /**

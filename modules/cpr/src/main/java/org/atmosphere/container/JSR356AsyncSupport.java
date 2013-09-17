@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Jeanfrancois Arcand
+ * Copyright 2013 Jeanfrancois Arcand
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -24,5 +24,10 @@ public class JSR356AsyncSupport extends Servlet30CometSupport {
 
     public boolean supportWebSocket() {
         return true;
+    }
+
+    @Override
+    public String getContainerName() {
+        return super.getContainerName() + " using javax.servlet/3.0 and jsr356/WebSocket API";
     }
 }

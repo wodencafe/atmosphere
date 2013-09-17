@@ -107,7 +107,6 @@ public class BroadcasterConfig {
 
         configureBroadcasterFilter(list);
         configureBroadcasterCache();
-        configureSharedCacheExecutor();
         this.handleExecutors = handleExecutors;
     }
 
@@ -133,6 +132,8 @@ public class BroadcasterConfig {
                             .loadClass(className).newInstance();
                 }
                 InjectorProvider.getInjector().inject(broadcasterCache);
+                configureSharedCacheExecutor();
+                broadcasterCache.configure(this);
             }
 
             for (BroadcasterCacheInspector b : config.framework().inspectors()) {
@@ -152,7 +153,6 @@ public class BroadcasterConfig {
         if (!shared) return;
 
         config.properties().put("shared", "true");
-        broadcasterCache.configure(config);
     }
 
     protected BroadcasterConfig broadcasterID(String name) {
@@ -331,6 +331,7 @@ public class BroadcasterConfig {
     protected void destroy(boolean force) {
         if (!force && !handleExecutors) return;
 
+        broadcasterCache.cleanup();
         if ((force || !shared) && broadcasterCache != null) {
             broadcasterCache.stop();
         }

@@ -61,6 +61,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
@@ -109,6 +110,7 @@ public class DefaultBroadcaster implements Broadcaster {
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultBroadcaster.class);
     private static final String DESTROYED = "This Broadcaster has been destroyed and cannot be used {} by invoking {}";
+    private static final List<AtmosphereResourceEventListener> EMPTY_LISTENERS = new ArrayList<AtmosphereResourceEventListener>();
 
     protected final ConcurrentLinkedQueue<AtmosphereResource> resources =
             new ConcurrentLinkedQueue<AtmosphereResource>();
@@ -144,7 +146,7 @@ public class DefaultBroadcaster implements Broadcaster {
     private final AtomicBoolean outOfOrderBroadcastSupported = new AtomicBoolean(false);
     protected int writeTimeoutInSecond = -1;
     protected final AtmosphereResource noOpsResource;
-    protected int waitTime = 1000;
+    protected int waitTime = 100;
 
     public DefaultBroadcaster(String name, URI uri, AtmosphereConfig config) {
         this.name = name;
@@ -358,6 +360,8 @@ public class DefaultBroadcaster implements Broadcaster {
     @Override
     public void setBroadcasterLifeCyclePolicy(final BroadcasterLifeCyclePolicy lifeCyclePolicy) {
         this.lifeCyclePolicy = lifeCyclePolicy;
+        logger.trace("{} new lifecycle policy: {}", name, lifeCyclePolicy.getLifeCyclePolicy().name());
+
         if (currentLifecycleTask != null) {
             currentLifecycleTask.cancel(false);
         }
@@ -757,10 +761,11 @@ public class DefaultBroadcaster implements Broadcaster {
                 case ALL:
                     for (AtmosphereResource r : resources) {
                         entry.message = beforeProcessingMessage;
-                        boolean deliverMessage = perRequestFilter(r, entry, false);
+                        boolean deliverMessage = perRequestFilter(r, entry);
 
                         if (!deliverMessage || entry.message == null) {
-                            logger.debug("Skipping broadcast delivery resource {} ", r.uuid());
+                            logger.debug("Skipping broadcast delivery {} for resource {} ", entry.message, r.uuid());
+                            bc.getBroadcasterCache().clearCache(getID(), r, entry.cache);
                             continue;
                         }
 
@@ -770,10 +775,11 @@ public class DefaultBroadcaster implements Broadcaster {
                     }
                     break;
                 case RESOURCE:
-                    boolean deliverMessage = perRequestFilter(entry.resource, entry, false);
+                    boolean deliverMessage = perRequestFilter(entry.resource, entry);
 
                     if (!deliverMessage || entry.message == null) {
-                        logger.debug("Skipping broadcast delivery resource {} ", entry.resource.uuid());
+                        logger.debug("Skipping broadcast delivery {} for resource {} ", entry.message, entry.resource.uuid());
+                        bc.getBroadcasterCache().clearCache(getID(), entry.resource, entry.cache);
                         return;
                     }
 
@@ -784,10 +790,11 @@ public class DefaultBroadcaster implements Broadcaster {
                 case SET:
                     for (AtmosphereResource r : entry.resources) {
                         entry.message = beforeProcessingMessage;
-                        deliverMessage = perRequestFilter(r, entry, false);
+                        deliverMessage = perRequestFilter(r, entry);
 
                         if (!deliverMessage || entry.message == null) {
-                            logger.debug("Skipping broadcast delivery resource {} ", r.uuid());
+                            logger.debug("Skipping broadcast delivery {} for resource {} ", entry.message, r.uuid());
+                            bc.getBroadcasterCache().clearCache(getID(), r, entry.cache);
                             continue;
                         }
 
@@ -845,27 +852,19 @@ public class DefaultBroadcaster implements Broadcaster {
         }
     }
 
-    protected boolean perRequestFilter(AtmosphereResource r, Entry msg, boolean cache) {
+    protected boolean perRequestFilter(AtmosphereResource r, Entry msg) {
         // A broadcaster#broadcast(msg,Set) may contains null value.
         if (r == null) {
             logger.trace("Null AtmosphereResource passed inside a Set");
             return false;
         }
 
-        if (isAtmosphereResourceValid(r)) {
-            if (bc.hasPerRequestFilters()) {
-                BroadcastAction a = bc.filter(r, msg.message, msg.originalMessage);
-                if (a.action() == BroadcastAction.ACTION.ABORT) {
-                    return false;
-                }
-                msg.message = a.message();
+        if (bc.hasPerRequestFilters()) {
+            BroadcastAction a = bc.filter(r, msg.message, msg.originalMessage);
+            if (a.action() == BroadcastAction.ACTION.ABORT) {
+                return false;
             }
-        } else {
-            logger.warn("Request is no longer valid {}, Message {} will be cached", r.uuid(), msg.originalMessage);
-            if (cache) {
-                bc.getBroadcasterCache().addToCache(getID(), r, new BroadcastMessage(msg.originalMessage));
-            }
-            return false;
+            msg.message = a.message();
         }
         return true;
     }
@@ -888,6 +887,10 @@ public class DefaultBroadcaster implements Broadcaster {
 
         final AtmosphereResourceEventImpl event = (AtmosphereResourceEventImpl) token.resource.getAtmosphereResourceEvent();
         final AtmosphereResourceImpl r = AtmosphereResourceImpl.class.cast(token.resource);
+        final boolean willBeResumed = r.transport().equals(AtmosphereResource.TRANSPORT.LONG_POLLING) || r.transport().equals(AtmosphereResource.TRANSPORT.JSONP);
+        final AtmosphereRequest request = r.getRequest();
+
+        List<AtmosphereResourceEventListener> listeners = willBeResumed ? new ArrayList() : EMPTY_LISTENERS;
         try {
             event.setMessage(token.msg);
 
@@ -900,8 +903,9 @@ public class DefaultBroadcaster implements Broadcaster {
 
             bc.getBroadcasterCache().clearCache(getID(), r, token.cache);
             try {
-                r.getRequest().setAttribute(getID(), token.future);
-                r.getRequest().setAttribute(MAX_INACTIVE, System.currentTimeMillis());
+                request.setAttribute(getID(), token.future);
+                request.setAttribute(MAX_INACTIVE, System.currentTimeMillis());
+                request.setAttribute(ASYNC_TOKEN, token);
             } catch (Throwable t) {
                 logger.debug("Invalid AtmosphereResource state {}. The connection has been remotely" +
                         " closed and message {} will be added to the configured BroadcasterCache for later retrieval", r.uuid(), event.getMessage());
@@ -917,12 +921,30 @@ public class DefaultBroadcaster implements Broadcaster {
                 return;
             }
 
-            r.getRequest().setAttribute(ASYNC_TOKEN, token);
+            if (willBeResumed && !r.atmosphereResourceEventListener().isEmpty()) {
+                listeners.addAll(r.atmosphereResourceEventListener());
+            }
+
             prepareInvokeOnStateChange(r, event);
-            r.getRequest().setAttribute(FrameworkConfig.MESSAGE_WRITTEN, "true");
+            try {
+                request.setAttribute(FrameworkConfig.MESSAGE_WRITTEN, "true");
+            } catch (NullPointerException ex) {
+                // GlassFish and Tomcat may have recycled the request at that moment so the operation will fail.
+                // In that case we don't cache the message as it has been successfully written or cached later
+                // in the code.
+                logger.trace("NPE after the message has been written for {}", r.uuid());
+            }
         } finally {
             if (notifyListeners) {
-                r.notifyListeners();
+                // Long Polling listener will be cleared when the resume() is called.
+                if (willBeResumed) {
+                    event.setMessage(token.msg);
+                    for (AtmosphereResourceEventListener e: listeners) {
+                        e.onBroadcast(event);
+                    }
+                } else {
+                    r.notifyListeners();
+                }
             }
 
             entryDone(token.future);
@@ -943,8 +965,9 @@ public class DefaultBroadcaster implements Broadcaster {
             logger.debug("Sending cached message {} to {}", e.getMessage(), r.uuid());
 
             List<Object> cacheMessages = (List) e.getMessage();
-            BroadcasterFuture<Object> f = new BroadcasterFuture<Object>(e.getMessage(), 1, this);
+            BroadcasterFuture<Object> f = new BroadcasterFuture<Object>(e.getMessage(), 1);
             LinkedList<Object> filteredMessage = new LinkedList<Object>();
+            LinkedList<Object> filteredMessageClone = null;
             Entry entry;
             Object newMessage;
             for (Object o : cacheMessages) {
@@ -955,7 +978,7 @@ public class DefaultBroadcaster implements Broadcaster {
 
                 entry = new Entry(newMessage, r, f, o);
                 // Can be aborted by a Filter
-                if (!perRequestFilter(r, entry, true)) {
+                if (!perRequestFilter(r, entry)) {
                     continue;
                 }
 
@@ -969,23 +992,39 @@ public class DefaultBroadcaster implements Broadcaster {
             }
             e.setMessage(filteredMessage);
 
-            r.getRequest().setAttribute(CACHED, "true");
+            final boolean willBeResumed = r.transport().equals(AtmosphereResource.TRANSPORT.LONG_POLLING) || r.transport().equals(AtmosphereResource.TRANSPORT.JSONP);
+
+            if (willBeResumed) {
+                filteredMessageClone = (LinkedList<Object>)filteredMessage.clone();
+            }
+
+            List<AtmosphereResourceEventListener> listeners = willBeResumed ? new ArrayList() : EMPTY_LISTENERS;
+            AtmosphereResourceImpl rImpl = AtmosphereResourceImpl.class.cast(r);
+            if (willBeResumed && !rImpl.atmosphereResourceEventListener().isEmpty()) {
+                listeners.addAll(rImpl.atmosphereResourceEventListener());
+            }
+
             // Must make sure execute only one thread
             synchronized (r) {
                 try {
+                    r.getRequest().setAttribute(CACHED, "true");
                     prepareInvokeOnStateChange(r, e);
                 } catch (Throwable t) {
-                    // An exception occured
+                    // An exception occurred
                     logger.error("Unable to write cached message {} for {}", e.getMessage(), r.uuid());
                     logger.error("", t);
-                    for (Object o : (List)e.getMessage()) {
+                    for (Object o : cacheMessages) {
                         bc.getBroadcasterCache().addToCache(getID(), r, new BroadcastMessage(o));
                     }
                     return true;
                 }
 
-                // TODO: CAST is dangerous
-                for (AtmosphereResourceEventListener l : AtmosphereResourceImpl.class.cast(r).atmosphereResourceEventListener()) {
+                // If long-polling or JSONP is used we need to set the messages for the event again, because onResume() have cleared them
+                if (willBeResumed) {
+                    e.setMessage(filteredMessageClone);
+                }
+
+                for (AtmosphereResourceEventListener l : willBeResumed ? listeners : rImpl.atmosphereResourceEventListener()) {
                     l.onBroadcast(e);
                 }
 
@@ -1083,6 +1122,8 @@ public class DefaultBroadcaster implements Broadcaster {
             }
             return null;
         }
+
+        public void interrupt() {}
     }
 
     public void onException(Throwable t, final AtmosphereResource ar) {
@@ -1206,14 +1247,14 @@ public class DefaultBroadcaster implements Broadcaster {
 
         int callee = resources.size() == 0 ? 1 : resources.size();
 
-        BroadcasterFuture<Object> f = new BroadcasterFuture<Object>(newMsg, callee, this);
+        BroadcasterFuture<Object> f = new BroadcasterFuture<Object>(newMsg, callee);
         dispatchMessages(new Entry(newMsg, f, msg));
         return f;
     }
 
     protected BroadcasterFuture<Object> futureDone(Object msg) {
         notifyBroadcastListener();
-        return (new BroadcasterFuture<Object>(msg, this)).done();
+        return (new BroadcasterFuture<Object>(msg)).done();
     }
 
     protected void dispatchMessages(Entry e) {
@@ -1254,7 +1295,7 @@ public class DefaultBroadcaster implements Broadcaster {
         Object newMsg = filter(msg);
         if (newMsg == null) return futureDone(msg);
 
-        BroadcasterFuture<Object> f = new BroadcasterFuture<Object>(newMsg, 1, this);
+        BroadcasterFuture<Object> f = new BroadcasterFuture<Object>(newMsg, 1);
         dispatchMessages(new Entry(newMsg, r, f, msg));
         return f;
     }
@@ -1274,7 +1315,7 @@ public class DefaultBroadcaster implements Broadcaster {
         Object newMsg = filter(msg);
         if (newMsg == null) return futureDone(msg);
 
-        BroadcasterFuture<Object> f = new BroadcasterFuture<Object>(newMsg, resources.size(), this);
+        BroadcasterFuture<Object> f = new BroadcasterFuture<Object>(newMsg, resources.size());
         broadcastOnResume.offer(new Entry(newMsg, f, msg));
         return f;
     }
@@ -1306,7 +1347,7 @@ public class DefaultBroadcaster implements Broadcaster {
         Object newMsg = filter(msg);
         if (newMsg == null) return futureDone(msg);
 
-        BroadcasterFuture<Object> f = new BroadcasterFuture<Object>(null, newMsg, subset.size(), this);
+        BroadcasterFuture<Object> f = new BroadcasterFuture<Object>(null, newMsg, subset.size());
         dispatchMessages(new Entry(newMsg, subset, f, msg));
         return f;
     }
@@ -1417,8 +1458,8 @@ public class DefaultBroadcaster implements Broadcaster {
     }
 
     private boolean isAtmosphereResourceValid(AtmosphereResource r) {
-        return !AtmosphereResourceImpl.class.cast(r).isResumed()
-                && !AtmosphereResourceImpl.class.cast(r).isCancelled()
+        return !r.isResumed()
+                && !r.isCancelled()
                 && AtmosphereResourceImpl.class.cast(r).isInScope();
     }
 
@@ -1568,7 +1609,7 @@ public class DefaultBroadcaster implements Broadcaster {
         final Object msg = filter(o);
         if (msg == null) return null;
 
-        final BroadcasterFuture<Object> future = new BroadcasterFuture<Object>(msg, this);
+        final BroadcasterFuture<Object> future = new BroadcasterFuture<Object>(msg);
         final Entry e = new Entry(msg, future, o);
         Future<Object> f;
         if (delay > 0) {
@@ -1597,7 +1638,7 @@ public class DefaultBroadcaster implements Broadcaster {
                 }
             }, delay, t);
 
-            e.future = new BroadcasterFuture<Object>(f, msg, this);
+            e.future = new BroadcasterFuture<Object>(f, msg);
         }
         delayedBroadcast.offer(e);
         return future;
@@ -1628,7 +1669,7 @@ public class DefaultBroadcaster implements Broadcaster {
         final Object msg = filter(o);
         if (msg == null) return null;
 
-        final BroadcasterFuture<Object> f = new BroadcasterFuture<Object>(msg, DefaultBroadcaster.this);
+        final BroadcasterFuture<Object> f = new BroadcasterFuture<Object>(msg);
 
         return (Future<Object>) bc.getScheduledExecutorService().scheduleWithFixedDelay(new Runnable() {
             public void run() {
@@ -1656,7 +1697,6 @@ public class DefaultBroadcaster implements Broadcaster {
         return new StringBuilder().append("\n\tName: ").append(name)
                 .append("\n\tAtmosphereResource: ").append(resources.size())
                 .append("\n\tBroadcasterCache ").append(bc.getBroadcasterCache())
-                .append(this.getClass().getName()).append("@").append(this.hashCode())
                 .toString();
     }
 

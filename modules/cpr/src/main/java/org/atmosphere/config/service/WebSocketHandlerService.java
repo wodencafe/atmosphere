@@ -21,6 +21,7 @@ import org.atmosphere.cpr.BroadcastFilter;
 import org.atmosphere.cpr.Broadcaster;
 import org.atmosphere.cpr.BroadcasterCache;
 import org.atmosphere.cpr.DefaultBroadcaster;
+import org.atmosphere.websocket.WebSocketEventListener;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -44,11 +45,13 @@ public @interface WebSocketHandlerService {
     Class<? extends BroadcastFilter>[] broadcastFilters() default {};
 
     /**
-     * The {@link org.atmosphere.cpr.BroadcasterCache} class name
-     *
-     * @return The {@link org.atmosphere.cpr.Broadcaster} class name
-     */
-    Class<? extends BroadcasterCache> broadcasterCache() default DefaultBroadcasterCache.class;
+      * The {@link org.atmosphere.cpr.BroadcasterCache} class name. By default, a no ops {@link DefaultBroadcasterCache}
+      * is installed. It is strongly recommend to install the {@link org.atmosphere.cache.UUIDBroadcasterCache} to prevent
+      * message being lost.
+      *
+      * @return The {@link org.atmosphere.cpr.Broadcaster} class name
+      */
+     Class<? extends BroadcasterCache> broadcasterCache() default DefaultBroadcasterCache.class;
 
     /**
      * The mapping path, or context-root used to map this WebSocketHandler
@@ -76,5 +79,10 @@ public @interface WebSocketHandlerService {
       * delimited using "=" and separated using coma.
       */
      String[] atmosphereConfig() default {};
+
+    /**
+     * Add {@link org.atmosphere.cpr.AtmosphereResourceEventListener} to track internal events.
+     */
+    public Class<? extends WebSocketEventListener>[] listeners() default {};
 
 }
