@@ -489,6 +489,5 @@
         <slf4j-version>1.6.1</slf4j-version>
         <logback-version>0.9.30</logback-version>
         <client-version>2.0.3</client-version>
-        <compat-version>2.0.0</compat-version>
     </properties>
 </project>
