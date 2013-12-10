@@ -15,8 +15,9 @@
  */
 package org.atmosphere.cpr;
 
-import org.atmosphere.websocket.WebSocket;
+import org.atmosphere.util.CookieUtil;
 import org.atmosphere.util.ServletProxyFactory;
+import org.atmosphere.websocket.WebSocket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,11 +46,11 @@ import static org.atmosphere.cpr.ApplicationConfig.PROPERTY_USE_STREAM;
 import static org.atmosphere.cpr.ApplicationConfig.RECYCLE_ATMOSPHERE_REQUEST_RESPONSE;
 
 /**
- * An Atmosphere's response representation. An AtmosphereResponse can be used to construct bi-directional asynchronous
+ * An Atmosphere's response representation. An AtmosphereResponse can be used to construct a bi-directional asynchronous
  * application. If the underlying transport is a WebSocket or if its associated {@link AtmosphereResource} has been
- * suspended, this object can be used to write message back tp the client at any moment.
+ * suspended, this object can be used to write message back to the client at any moment.
  * <br/>
- * This object can delegates the write operation to {@link AsyncIOWriter}.
+ * This object can delegate the write operation to {@link AsyncIOWriter}.
  */
 public class AtmosphereResponse extends HttpServletResponseWrapper {
 
@@ -80,6 +81,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
     private HttpServletResponse response;
     private boolean forceAsyncIOWriter = false;
     private String uuid = "0";
+    private final AtomicBoolean usingStream = new AtomicBoolean(true);
 
     public AtmosphereResponse(AsyncIOWriter asyncIOWriter, AtmosphereRequest atmosphereRequest, boolean destroyable) {
         super(dsr);
@@ -191,9 +193,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         asyncIOWriter = null;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void addCookie(Cookie cookie) {
         if (delegateToNativeResponse) {
@@ -203,41 +202,26 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public boolean containsHeader(String name) {
         return !delegateToNativeResponse ? (headers.get(name) == null ? false : true) : _r().containsHeader(name);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String encodeURL(String url) {
         return response.encodeURL(url);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String encodeRedirectURL(String url) {
         return response.encodeRedirectURL(url);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String encodeUrl(String url) {
         return response.encodeURL(url);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String encodeRedirectUrl(String url) {
         return response.encodeRedirectURL(url);
@@ -248,9 +232,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         return this;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void sendError(int sc, String msg) throws IOException {
         if (forceAsyncIOWriter || !delegateToNativeResponse) {
@@ -270,9 +251,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void sendError(int sc) throws IOException {
         if (forceAsyncIOWriter || !delegateToNativeResponse) {
@@ -291,9 +269,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void sendRedirect(String location) throws IOException {
         if (forceAsyncIOWriter || !delegateToNativeResponse) {
@@ -308,9 +283,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void setDateHeader(String name, long date) {
         if (!delegateToNativeResponse) {
@@ -320,9 +292,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void addDateHeader(String name, long date) {
         if (!delegateToNativeResponse) {
@@ -332,9 +301,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void setHeader(String name, String value) {
         headers.put(name, value);
@@ -348,9 +314,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void addHeader(String name, String value) {
         headers.put(name, value);
@@ -360,25 +323,16 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void setIntHeader(String name, int value) {
         setHeader(name, String.valueOf(value));
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void addIntHeader(String name, int value) {
         setHeader(name, String.valueOf(value));
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void setStatus(int status) {
         if (!delegateToNativeResponse) {
@@ -388,9 +342,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void setStatus(int status, String statusMessage) {
         if (!delegateToNativeResponse) {
@@ -401,14 +352,12 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public int getStatus() {
         return status;
     }
 
+    @Override
     public ServletResponse getResponse() {
         if (Proxy.class.isAssignableFrom(response.getClass())) {
             return this;
@@ -424,16 +373,13 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
     public Map<String, String> headers() {
         if (!headerHandled) {
             for (Cookie c : cookies) {
-                headers.put("Set-Cookie", c.toString());
+                headers.put("Set-Cookie", CookieUtil.toString(c));
             }
             headerHandled = true;
         }
         return headers;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String getHeader(String name) {
         if (name.equalsIgnoreCase("content-type")) {
@@ -443,9 +389,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         return headers.get(name);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Collection<String> getHeaders(String name) {
         ArrayList<String> s = new ArrayList<String>();
@@ -459,17 +402,11 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         return Collections.unmodifiableList(s);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Collection<String> getHeaderNames() {
         return Collections.unmodifiableSet(headers.keySet());
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void setCharacterEncoding(String charSet) {
         if (!delegateToNativeResponse) {
@@ -479,9 +416,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void flushBuffer() throws IOException {
         try {
@@ -492,17 +426,11 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public int getBufferSize() {
         return response.getBufferSize();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String getCharacterEncoding() {
         if (!delegateToNativeResponse) {
@@ -513,7 +441,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
     }
 
     /**
-     * Can this object be destroyed. Default is true.
+     * Check if this object can be destroyed. Default is true.
      */
     public boolean isDestroyable() {
         return destroyable;
@@ -536,9 +464,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         return true;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public ServletOutputStream getOutputStream() throws IOException {
         if (forceAsyncIOWriter || !delegateToNativeResponse) {
@@ -672,9 +597,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         return b.toString();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public PrintWriter getWriter() throws IOException {
         if (forceAsyncIOWriter || !delegateToNativeResponse) {
@@ -791,9 +713,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void setContentLength(int len) {
         headers.put("Content-Length", String.valueOf(len));
@@ -805,9 +724,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void setContentType(String contentType) {
         headers.put("Content-Type", String.valueOf(contentType));
@@ -819,17 +735,11 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public String getContentType() {
         return getHeader("Content-type");
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public boolean isCommitted() {
         if (!delegateToNativeResponse) {
@@ -854,9 +764,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         response.setBufferSize(size);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void setLocale(Locale locale) {
         if (!delegateToNativeResponse) {
@@ -866,9 +773,6 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Locale getLocale() {
         if (!delegateToNativeResponse) {
@@ -879,7 +783,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
     }
 
     /**
-     * Return the underlying {@link AsyncIOWriter}
+     * Return the underlying {@link AsyncIOWriter}.
      */
     public AsyncIOWriter getAsyncIOWriter() {
         return asyncIOWriter;
@@ -899,7 +803,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
     }
 
     /**
-     * Return the associated {@link AtmosphereRequest}
+     * Return the associated {@link AtmosphereRequest}.
      *
      * @return the associated {@link AtmosphereRequest}
      */
@@ -908,7 +812,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
     }
 
     /**
-     * Set the associated {@link AtmosphereRequest}
+     * Set the associated {@link AtmosphereRequest}.
      *
      * @param atmosphereRequest a {@link AtmosphereRequest}
      * @return this
@@ -919,7 +823,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
     }
 
     /**
-     * Close the associated {@link AsyncIOWriter}
+     * Close the associated {@link AsyncIOWriter}.
      *
      * @throws IOException
      */
@@ -966,13 +870,13 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
             AtmosphereResourceImpl.class.cast(r).notifyListeners(
                     new AtmosphereResourceEventImpl(AtmosphereResourceImpl.class.cast(r), true, false));
         }
-        logger.debug("", ex);
+        logger.trace("", ex);
     }
 
     /**
      * Write the String by either using the {@link PrintWriter} or {@link java.io.OutputStream}. The decision is
-     * based on the request attribute  {@link ApplicationConfig#PROPERTY_USE_STREAM} If writeUsingOriginalResponse if set to true,
-     * execute the write without invoking the defined {@link AsyncIOWriter}
+     * based on the request attribute {@link ApplicationConfig#PROPERTY_USE_STREAM}. If writeUsingOriginalResponse is
+     * set to true, execute the write without invoking the defined {@link AsyncIOWriter}.
      *
      * @param data                       the String to write
      * @param writeUsingOriginalResponse if true, execute the write without invoking the {@link AsyncIOWriter}
@@ -1002,17 +906,26 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
     }
 
     private boolean isUsingStream() {
-        Object s = request().getAttribute(PROPERTY_USE_STREAM);
-        if (s == null) {
-            return true;
-        } else {
-            return (Boolean) request().getAttribute(PROPERTY_USE_STREAM);
+        if (atmosphereRequest != null) {
+            Object s = atmosphereRequest.getAttribute(PROPERTY_USE_STREAM);
+            if (s != null) {
+                usingStream.set((Boolean) s);
+            }
         }
+
+        // Property always take first.
+        if (resource() != null) {
+            boolean force = resource().forceBinaryWrite();
+            if (!usingStream.get() && force) {
+                usingStream.set(force);
+            }
+        }
+        return usingStream.get();
     }
 
     /**
      * Write the bytes by either using the {@link PrintWriter} or {@link java.io.OutputStream}. The decision is
-     * based on the request attribute  {@link ApplicationConfig#PROPERTY_USE_STREAM}
+     * based on the request attribute {@link ApplicationConfig#PROPERTY_USE_STREAM}.
      *
      * @param data the bytes to write
      */
@@ -1021,9 +934,9 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
     }
 
     /**
-     * Write the String by either using the {@link PrintWriter} or {@link java.io.OutputStream}. The decision is
-     * based on the request attribute  {@link ApplicationConfig#PROPERTY_USE_STREAM} If writeUsingOriginalResponse if set to true,
-     * execute the write without invoking the defined {@link AsyncIOWriter}
+     * Write the String by either using the {@link PrintWriter} or {@link java.io.OutputStream}. The decision is based
+     * on the request attribute  {@link ApplicationConfig#PROPERTY_USE_STREAM}. If writeUsingOriginalResponse is set to
+     * true, execute the write without invoking the defined {@link AsyncIOWriter}.
      *
      * @param data                       the bytes to write
      * @param writeUsingOriginalResponse if true, execute the write without invoking the {@link AsyncIOWriter}
@@ -1052,13 +965,14 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
             }
         } catch (Exception ex) {
             handleException(ex);
+            throw new RuntimeException(ex);
         }
         return this;
     }
 
     /**
      * Write the bytes by either using the {@link PrintWriter} or {@link java.io.OutputStream}. The decision is
-     * based on the request attribute  {@link ApplicationConfig#PROPERTY_USE_STREAM}
+     * based on the request attribute {@link ApplicationConfig#PROPERTY_USE_STREAM}.
      *
      * @param data   the bytes to write
      * @param offset the first byte position to write
@@ -1069,9 +983,9 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
     }
 
     /**
-     * Write the String by either using the {@link PrintWriter} or {@link java.io.OutputStream}. The decision is
-     * based on the request attribute  {@link ApplicationConfig#PROPERTY_USE_STREAM} If writeUsingOriginalResponse if set to true,
-     * execute the write without invoking the defined {@link AsyncIOWriter}
+     * Write the String by either using the {@link PrintWriter} or {@link java.io.OutputStream}. The decision is based
+     * on the request attribute {@link ApplicationConfig#PROPERTY_USE_STREAM}. If writeUsingOriginalResponse is set to
+     * true, execute the write without invoking the defined {@link AsyncIOWriter}.
      *
      * @param data                       the bytes to write
      * @param offset                     the first byte position to write
@@ -1120,6 +1034,7 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
         }
     }
 
+    @Override
     public void setResponse(ServletResponse response) {
         super.setResponse(response);
         if (HttpServletResponse.class.isAssignableFrom(response.getClass())) {
@@ -1134,6 +1049,15 @@ public class AtmosphereResponse extends HttpServletResponseWrapper {
      */
     public final static AtmosphereResponse newInstance() {
         return new Builder().build();
+    }
+
+    /**
+     * Create a new instance to use with WebSocket.
+     *
+     * @return
+     */
+    public final static AtmosphereResponse newInstance(AtmosphereRequest request) {
+        return new AtmosphereResponse(null, request, request.isDestroyable());
     }
 
     /**

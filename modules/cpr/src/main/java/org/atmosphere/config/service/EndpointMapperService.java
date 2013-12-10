@@ -13,16 +13,21 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package org.atmosphere.di;
+package org.atmosphere.config.service;
 
-import javax.servlet.ServletContext;
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 /**
- * Mark an object as being able to provide a ServletContext
+ * An annotation to use in order to replace the default {@link org.atmosphere.util.EndpointMapper}
  *
- * @author Mathieu Carbou
- * @since 0.7
+ * @author Jeanfrancois Arcand
  */
-public interface ServletContextProvider {
-    ServletContext getServletContext();
+@Target({ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface EndpointMapperService {
 }

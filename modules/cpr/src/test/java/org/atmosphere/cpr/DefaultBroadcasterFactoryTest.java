@@ -19,7 +19,6 @@ import org.atmosphere.util.SimpleBroadcaster;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
-import java.net.URI;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -266,8 +265,7 @@ public class DefaultBroadcasterFactoryTest {
 
         public static AtomicInteger instance = new AtomicInteger();
 
-        public TestBroadcaster(String name, AtmosphereConfig config) {
-            super(name, config);
+        public TestBroadcaster() {
             instance.incrementAndGet();
         }
     }

@@ -15,7 +15,9 @@
  */
 package org.atmosphere.util;
 
+import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereRequest;
+import org.atmosphere.cpr.FrameworkConfig;
 import org.atmosphere.util.uri.UriTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,7 +32,7 @@ import java.util.Map;
  * @author Jeanfrancois Arcand
  */
 public class DefaultEndpointMapper<U> implements EndpointMapper<U> {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(DefaultEndpointMapper.class);
 
     public DefaultEndpointMapper() {
@@ -42,23 +44,24 @@ public class DefaultEndpointMapper<U> implements EndpointMapper<U> {
         if (handler == null) {
             final Map<String, String> m = new HashMap<String, String>();
             for (Map.Entry<String, U> e : handlers.entrySet()) {
-                UriTemplate t = new UriTemplate(e.getKey());
-                logger.trace("Trying to map {} to {}", t, path);
-                if (t.match(path, m)) {
-                    handler = e.getValue();
-                    logger.trace("Mapped {} to {}", t, e.getValue());
-                    break;
+                UriTemplate t = null;
+                try {
+                    t = new UriTemplate(e.getKey());
+                    logger.trace("Trying to map {} to {}", t, path);
+                    if (t.match(path, m)) {
+                        handler = e.getValue();
+                        logger.trace("Mapped {} to {}", t, e.getValue());
+                        break;
+                    }
+                } finally {
+                    if (t != null) t.destroy();
                 }
             }
         }
         return handler;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public U map(AtmosphereRequest req, Map<String, U> handlers) {
+    public String computePath(AtmosphereRequest req) {
         String path;
         String pathInfo = null;
         try {
@@ -76,6 +79,16 @@ public class DefaultEndpointMapper<U> implements EndpointMapper<U> {
         if (path == null || path.isEmpty()) {
             path = "/";
         }
+        return path;
+    }
+
+    @Override
+    public void configure(AtmosphereConfig config) {
+    }
+
+    @Override
+    public U map(AtmosphereRequest req, Map<String, U> handlers) {
+        String path = computePath(req);
 
         U handler = map(path + (path.endsWith("/") ? "all" : "/all"), handlers);
         if (handler == null) {
@@ -107,12 +120,10 @@ public class DefaultEndpointMapper<U> implements EndpointMapper<U> {
                 }
             }
         }
+        req.setAttribute(FrameworkConfig.MAPPED_PATH, path);
         return handler;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public U map(String path, Map<String, U> handlers) {
 
@@ -131,7 +142,7 @@ public class DefaultEndpointMapper<U> implements EndpointMapper<U> {
 
                 // (4) try without a path
                 if (handler == null) {
-                    String p = path.lastIndexOf("/")  <= 0 ? "/" : path.substring(0, path.lastIndexOf("/"));
+                    String p = path.lastIndexOf("/") <= 0 ? "/" : path.substring(0, path.lastIndexOf("/"));
                     while (p.length() > 0 && p.indexOf("/") != -1) {
                         handler = match(p, handlers);
 

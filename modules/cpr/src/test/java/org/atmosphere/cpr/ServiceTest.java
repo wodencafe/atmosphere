@@ -28,6 +28,7 @@ import static org.testng.Assert.assertEquals;
 
 public class ServiceTest {
     private AtmosphereFramework framework;
+
     @BeforeMethod
     public void create() throws Throwable {
         framework = new AtmosphereFramework();
@@ -64,8 +65,7 @@ public class ServiceTest {
     @BroadcasterService
     public final static class B extends SimpleBroadcaster {
 
-        public B(String id, AtmosphereConfig config) {
-            super(id, config);
+        public B() {
         }
     }
 

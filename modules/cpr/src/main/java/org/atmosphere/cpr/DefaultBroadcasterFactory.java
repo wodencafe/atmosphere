@@ -52,11 +52,10 @@
  */
 package org.atmosphere.cpr;
 
-
-import org.atmosphere.di.InjectorProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -73,9 +72,8 @@ import static org.atmosphere.cpr.BroadcasterLifeCyclePolicy.ATMOSPHERE_RESOURCE_
 import static org.atmosphere.cpr.BroadcasterLifeCyclePolicy.ATMOSPHERE_RESOURCE_POLICY.NEVER;
 
 /**
- * This class is responsible for creating {@link Broadcaster} instance. You can also add and remove {@link Broadcaster}
- * and lookup using {@link BroadcasterFactory#getDefault()} ()}
- * from any Classes loaded using the same class loader.
+ * This class is responsible for creating {@link Broadcaster} instances. You can also add and remove {@link Broadcaster}
+ * and lookup using {@link BroadcasterFactory#getDefault()} ()} from any classes loaded using the same class loader.
  *
  * @author Jeanfrancois Arcand
  * @author Jason Burgess
@@ -85,13 +83,14 @@ public class DefaultBroadcasterFactory extends BroadcasterFactory {
     private static final Logger logger = LoggerFactory.getLogger(DefaultBroadcasterFactory.class);
 
     private final ConcurrentHashMap<Object, Broadcaster> store = new ConcurrentHashMap<Object, Broadcaster>();
-    
+
     private final Class<? extends Broadcaster> clazz;
-    
+
     private BroadcasterLifeCyclePolicy policy =
             new BroadcasterLifeCyclePolicy.Builder().policy(NEVER).build();
     protected Broadcaster.POLICY defaultPolicy = Broadcaster.POLICY.FIFO;
     protected int defaultPolicyInteger = -1;
+    private final URI legacyBroadcasterURI = URI.create("http://127.0.0.0");
 
     protected DefaultBroadcasterFactory(Class<? extends Broadcaster> clazz, String broadcasterLifeCyclePolicy, AtmosphereConfig c) {
         this.clazz = clazz;
@@ -135,23 +134,17 @@ public class DefaultBroadcasterFactory extends BroadcasterFactory {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public synchronized final Broadcaster get() {
         return get(clazz.getSimpleName() + "-" + UUID.randomUUID());
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public final Broadcaster get(Object id) {
         return get(clazz, id);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public final <T extends Broadcaster> T get(Class<T> c, Object id) {
 
         if (id == null) {
@@ -164,15 +157,15 @@ public class DefaultBroadcasterFactory extends BroadcasterFactory {
         return lookup(c, id, true, true);
     }
 
-    private <T extends Broadcaster> T  createBroadcaster(Class<T> c, Object id) throws BroadcasterCreationException {
+    private <T extends Broadcaster> T createBroadcaster(Class<T> c, Object id) throws BroadcasterCreationException {
         try {
-            T b = c.getConstructor(String.class, AtmosphereConfig.class).newInstance(id.toString(), config);
-            InjectorProvider.getInjector().inject(b);
-
+            //T b = c.getConstructor(String.class, AtmosphereConfig.class).newInstance(id.toString(), config);
+            T b = config.framework().newClassInstance(c);
+            b.initialize(id.toString(), legacyBroadcasterURI, config);
             b.setSuspendPolicy(defaultPolicyInteger, defaultPolicy);
 
             if (b.getBroadcasterConfig() == null) {
-                b.setBroadcasterConfig(new BroadcasterConfig(config.framework().broadcasterFilters, config, id.toString()));
+                b.setBroadcasterConfig(new BroadcasterConfig(config.framework().broadcasterFilters, config, id.toString()).init());
             }
 
             b.setBroadcasterLifeCyclePolicy(policy);
@@ -192,57 +185,45 @@ public class DefaultBroadcasterFactory extends BroadcasterFactory {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public boolean add(Broadcaster b, Object id) {
         return (store.put(id, b) == null);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public boolean remove(Broadcaster b, Object id) {
         boolean removed = store.remove(id, b);
-        if (removed) {
+        if (removed && logger.isDebugEnabled()) {
             logger.debug("Removing Broadcaster {} factory size now {} ", id, store.size());
         }
         return removed;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    public final  <T extends Broadcaster> T lookup(Class<T> c, Object id) {
+    @Override
+    public final <T extends Broadcaster> T lookup(Class<T> c, Object id) {
         return lookup(c, id, false);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public final Broadcaster lookup(Object id) {
         return lookup(clazz, id, false);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public final Broadcaster lookup(Object id, boolean createIfNull) {
         return lookup(clazz, id, createIfNull);
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    public  <T extends Broadcaster> T lookup(Class<T> c, Object id, boolean createIfNull) {
+    @Override
+    public <T extends Broadcaster> T lookup(Class<T> c, Object id, boolean createIfNull) {
         return lookup(c, id, createIfNull, false);
     }
 
     public <T extends Broadcaster> T lookup(Class<T> c, Object id, boolean createIfNull, boolean unique) {
-        synchronized(id) {
+        synchronized (id) {
             logger.trace("About to create {}", id);
             if (unique && store.get(id) != null) {
-                throw new IllegalStateException("Broadcaster already existing " + id + ". Use BroadcasterFactory.lookup instead");
+                throw new IllegalStateException("Broadcaster already exists " + id + ". Use BroadcasterFactory.lookup instead");
             }
 
             T b = (T) store.get(id);
@@ -265,7 +246,7 @@ public class DefaultBroadcasterFactory extends BroadcasterFactory {
                     store.put(id, nb);
                 }
 
-                if (nb == null) {
+                if (nb == null && logger.isTraceEnabled()) {
                     logger.trace("Added Broadcaster {} . Factory size: {}", id, store.size());
                 }
 
@@ -275,9 +256,6 @@ public class DefaultBroadcasterFactory extends BroadcasterFactory {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void removeAllAtmosphereResource(AtmosphereResource r) {
         // Remove inside all Broadcaster as well.
@@ -304,23 +282,18 @@ public class DefaultBroadcasterFactory extends BroadcasterFactory {
         return store.remove(id) != null;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Collection<Broadcaster> lookupAll() {
         return Collections.unmodifiableCollection(store.values());
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public synchronized void destroy() {
 
         String s = config.getInitParameter(ApplicationConfig.SHARED);
         if (s != null && s.equalsIgnoreCase("true")) {
-            logger.warn("Factory shared, will not be destroyed. That can possibly cause memory leaks if" +
-                    "Broadcaster where created. Make sure you destroy them manually.");
+            logger.warn("Factory shared, will not be destroyed. This can possibly cause memory leaks if" +
+                    "Broadcasters were created. Make sure you destroy them manually.");
             return;
         }
 
@@ -340,6 +313,7 @@ public class DefaultBroadcasterFactory extends BroadcasterFactory {
                 logger.debug("Destroy", t);
             }
         }
+        broadcasterListeners.clear();
         store.clear();
         factory = null;
     }
@@ -367,7 +341,7 @@ public class DefaultBroadcasterFactory extends BroadcasterFactory {
             throws InstantiationException, IllegalAccessException {
 
         factory = new DefaultBroadcasterFactory(clazz, "NEVER", c);
-         c.framework().setBroadcasterFactory(factory);
+        c.framework().setBroadcasterFactory(factory);
         return factory;
     }
 
@@ -377,23 +351,19 @@ public class DefaultBroadcasterFactory extends BroadcasterFactory {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public BroadcasterFactory addBroadcasterListener(BroadcasterListener l) {
         super.addBroadcasterListener(l);
-        for (Broadcaster b: store.values()) {
+        for (Broadcaster b : store.values()) {
             b.addBroadcasterListener(l);
         }
         return this;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public BroadcasterFactory removeBroadcasterListener(BroadcasterListener l) {
         super.removeBroadcasterListener(l);
-        for (Broadcaster b: store.values()) {
+        for (Broadcaster b : store.values()) {
             b.removeBroadcasterListener(l);
         }
         return this;

@@ -15,12 +15,10 @@
  */
 package org.atmosphere.cpr;
 
-import org.atmosphere.container.BlockingIOCometSupport;
 import org.atmosphere.cpr.AtmosphereRequest.NoOpsRequest;
 import org.atmosphere.util.FakeHttpSession;
 import org.testng.annotations.Test;
 
-import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
@@ -56,6 +54,8 @@ public class SessionTest {
                 response,
                 mock(AsyncSupport.class));
 
+        r.getAtmosphereConfig().setSupportSession(true);
+
         assertNull(r.session(false));
         assertNotNull(r.session());
         assertNotNull(r.session(true));
@@ -68,20 +68,22 @@ public class SessionTest {
                 response,
                 mock(AsyncSupport.class));
 
+        r.getAtmosphereConfig().setSupportSession(true);
+
         assertNotNull(r.session());
         assertNotNull(r.session(true));
     }
-    
+
     @Test
     public void sessionReplacementTest() {
-    	AtmosphereConfig config = new AtmosphereFramework().getAtmosphereConfig();
-    	config.setSupportSession(true);
-    	
-    	HttpServletRequest httpRequest = new NoOpsRequest();
+        AtmosphereConfig config = new AtmosphereFramework().getAtmosphereConfig();
+        config.setSupportSession(true);
+
+        HttpServletRequest httpRequest = new NoOpsRequest();
         AtmosphereRequest request = new AtmosphereRequest.Builder().request(httpRequest).session(httpRequest.getSession(true)).build();
         AtmosphereResponse response = new AtmosphereResponse.Builder().build();
         AtmosphereResource r = AtmosphereResourceFactory.getDefault().create(config, request, response, mock(AsyncSupport.class));
-        
+
         request.setAttribute(FrameworkConfig.ATMOSPHERE_RESOURCE, r);
 
         assertNotNull(request.getSession());

@@ -39,21 +39,22 @@ public class AnnotationHandler {
     private final Map<Class<? extends Annotation>, Class<? extends Processor>> annotations = new HashMap<Class<? extends Annotation>, Class<? extends Processor>>();
     private final Map<Class<? extends Processor>, Processor> processors = new HashMap<Class<? extends Processor>, Processor>();
 
-
     public AnnotationHandler() {
     }
 
     public Class<? extends Processor> handleProcessor(Class<?> clazz) {
         if (Processor.class.isAssignableFrom(clazz)) {
             Class<Processor> p = (Class<Processor>) clazz;
-            logger.trace("Processor {} associated with {}", p, p.getAnnotation(AtmosphereAnnotation.class).value() );
+            if (logger.isTraceEnabled()) {
+                logger.trace("Processor {} associated with {}", p, p.getAnnotation(AtmosphereAnnotation.class).value());
+            }
             annotations.put(p.getAnnotation(AtmosphereAnnotation.class).value(), p);
             return p;
         }
         return null;
     }
 
-    public Class<? extends Annotation>[] handledClass(){
+    public Class<? extends Annotation>[] handledClass() {
         Collection<Class<? extends Annotation>> c = annotations.keySet();
         return c.toArray(new Class[0]);
     }
@@ -66,7 +67,7 @@ public class AnnotationHandler {
             Processor p = processors.get(a);
             if (p == null) {
                 try {
-                    p = a.newInstance();
+                    p = framework.newClassInstance(a);
                 } catch (Exception e) {
                     logger.warn("Unable to create Processor {}", p);
                 }
@@ -84,7 +85,6 @@ public class AnnotationHandler {
         annotations.clear();
         processors.clear();
     }
-
 }
 
 

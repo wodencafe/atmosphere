@@ -81,6 +81,7 @@ public class Tomcat7CometSupport extends AsynchronousProcessor {
         CometEvent event = (CometEvent) req.getAttribute(COMET_EVENT);
 
         // Comet is not enabled.
+
         if (event == null) {
             throw unableToDetectComet;
         }
@@ -197,10 +198,6 @@ public class Tomcat7CometSupport extends AsynchronousProcessor {
         }
     }
 
-
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void action(AtmosphereResourceImpl resource) {
         super.action(resource);

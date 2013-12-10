@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.atmosphere.annotation.AnnotationUtil.atmosphereConfig;
+import static org.atmosphere.annotation.AnnotationUtil.broadcaster;
 import static org.atmosphere.annotation.AnnotationUtil.filters;
 import static org.atmosphere.annotation.AnnotationUtil.listeners;
 
@@ -40,7 +41,7 @@ public class MeteorServiceProcessor implements Processor {
     @Override
     public void handle(AtmosphereFramework framework, Class<?> annotatedClass) {
         try {
-            ReflectorServletProcessor r = new ReflectorServletProcessor();
+            ReflectorServletProcessor r = framework.newClassInstance(ReflectorServletProcessor.class);
             r.setServletClassName(annotatedClass.getName());
             List<AtmosphereInterceptor> l = new ArrayList<AtmosphereInterceptor>();
 
@@ -50,7 +51,6 @@ public class MeteorServiceProcessor implements Processor {
             String mapping = m.path();
 
             atmosphereConfig(m.atmosphereConfig(), framework);
-            framework.setDefaultBroadcasterClassName(m.broadcaster().getName());
             filters(m.broadcastFilters(), framework);
 
             AtmosphereInterceptor aa = listeners(m.listeners(), framework);
@@ -61,7 +61,7 @@ public class MeteorServiceProcessor implements Processor {
             Class<?>[] interceptors = m.interceptors();
             for (Class i : interceptors) {
                 try {
-                    AtmosphereInterceptor ai = (AtmosphereInterceptor) i.newInstance();
+                    AtmosphereInterceptor ai = (AtmosphereInterceptor) framework.newClassInstance(i);
                     l.add(ai);
                 } catch (Throwable e) {
                     logger.warn("", e);
@@ -69,9 +69,9 @@ public class MeteorServiceProcessor implements Processor {
             }
 
             if (m.path().contains("{")) {
-                framework.interceptors().add(new MeteorServiceInterceptor());
+                framework.interceptors().add(framework.newClassInstance(MeteorServiceInterceptor.class));
             }
-            framework.addAtmosphereHandler(mapping, r, l);
+            framework.addAtmosphereHandler(mapping, r, broadcaster(framework, m.broadcaster(), m.path()), l);
             framework.setBroadcasterCacheClassName(m.broadcasterCache().getName());
         } catch (Throwable e) {
             logger.warn("", e);

@@ -25,6 +25,7 @@ import org.atmosphere.cpr.AtmosphereResourceEvent;
 import org.atmosphere.cpr.AtmosphereResourceEventListenerAdapter;
 import org.atmosphere.cpr.BroadcastFilter;
 import org.atmosphere.cpr.HeaderConfig;
+import org.atmosphere.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,6 +41,7 @@ import static org.atmosphere.cpr.FrameworkConfig.CALLBACK_JAVASCRIPT_PROTOCOL;
  * @author Jeanfrancois Arcand
  */
 public class JavaScriptProtocol extends AtmosphereInterceptorAdapter {
+
     private final static Logger logger = LoggerFactory.getLogger(JavaScriptProtocol.class);
     private String wsDelimiter = "|";
     private final TrackMessageSizeFilter f = new TrackMessageSizeFilter();
@@ -79,7 +81,7 @@ public class JavaScriptProtocol extends AtmosphereInterceptorAdapter {
                 protocolMessage.set((String) f.filter(r, protocolMessage.get(), protocolMessage.get()).message());
             }
 
-            if (r.transport() != AtmosphereResource.TRANSPORT.LONG_POLLING && r.transport() != AtmosphereResource.TRANSPORT.JSONP) {
+            if (!Utils.resumableTransport(r.transport())) {
                 AtmosphereResourceEventListenerAdapter a = new AtmosphereResourceEventListenerAdapter() {
                     @Override
                     public void onSuspend(AtmosphereResourceEvent event) {

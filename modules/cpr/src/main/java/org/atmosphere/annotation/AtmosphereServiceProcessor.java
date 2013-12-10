@@ -17,6 +17,7 @@ package org.atmosphere.annotation;
 
 import org.atmosphere.config.AtmosphereAnnotation;
 import org.atmosphere.config.service.AtmosphereService;
+import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereFramework;
 import org.atmosphere.cpr.AtmosphereHandler;
 import org.atmosphere.cpr.AtmosphereInterceptor;
@@ -27,7 +28,6 @@ import org.atmosphere.handler.ReflectorServletProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
 import java.io.IOException;
 import java.util.LinkedList;
@@ -60,7 +60,7 @@ public class AtmosphereServiceProcessor implements Processor {
             }
 
             if (!a.servlet().isEmpty()) {
-                final ReflectorServletProcessor r = new ReflectorServletProcessor();
+                final ReflectorServletProcessor r = framework.newClassInstance(ReflectorServletProcessor.class);
                 r.setServletClassName(a.servlet());
 
                 String mapping = a.path();
@@ -68,7 +68,7 @@ public class AtmosphereServiceProcessor implements Processor {
                 Class<?>[] interceptors = a.interceptors();
                 for (Class i : interceptors) {
                     try {
-                        AtmosphereInterceptor ai = (AtmosphereInterceptor) i.newInstance();
+                        AtmosphereInterceptor ai = (AtmosphereInterceptor) framework.newClassInstance(i);
                         l.add(ai);
                     } catch (Throwable e) {
                         logger.warn("", e);
@@ -98,12 +98,12 @@ public class AtmosphereServiceProcessor implements Processor {
                         }
 
                         @Override
-                        public void init(ServletConfig sc) throws ServletException {
-                            String s = sc.getInitParameter(ATMOSPHERERESOURCE_INTERCEPTOR_METHOD);
+                        public void init(AtmosphereConfig config) throws ServletException {
+                            String s = config.getInitParameter(ATMOSPHERERESOURCE_INTERCEPTOR_METHOD);
                             if (s != null) {
                                 method = s;
                             }
-                            r.init(sc);
+                            r.init(config);
                         }
                     };
                     framework.addAtmosphereHandler(mapping, proxy, l);

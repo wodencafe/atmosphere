@@ -36,6 +36,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -78,6 +79,8 @@ public class AtmosphereResourceStateRecovery implements AtmosphereInterceptor {
             public void run() {
                 long now = System.currentTimeMillis();
                 for (Map.Entry<String, BroadcasterTracker> t : states.entrySet()) {
+                    // The resource may still be suspended but we don't want to keep a reference to it, so we swap
+                    // the state and will recover.
                     if (now - t.getValue().lastTick() > timeout) {
                         logger.trace("AtmosphereResource {} state destroyed.", t.getKey());
                         states.remove(t.getKey());
@@ -139,7 +142,9 @@ public class AtmosphereResourceStateRecovery implements AtmosphereInterceptor {
                          * invoked.
                          */
                         final List<Object> cachedMessages = retrieveCache(r, tracker, true);
-                        logger.trace("message size " + cachedMessages.size());
+                        if (logger.isTraceEnabled()) {
+                            logger.trace("message size {}", cachedMessages.size());
+                        }
                         if (cachedMessages.size() > 0) {
                             logger.trace("About to write to the cache {}", r.uuid());
                             writeCache(r, cachedMessages);
@@ -150,7 +155,9 @@ public class AtmosphereResourceStateRecovery implements AtmosphereInterceptor {
                         if (doNotSuspend.get()) {
                             AtmosphereResourceImpl.class.cast(r).action().type(Action.TYPE.CONTINUE);
                         }
-                        logger.trace("doNotSuspend " + doNotSuspend.get());
+                        if (logger.isTraceEnabled()) {
+                            logger.trace("doNotSuspend {}", doNotSuspend.get());
+                        }
                     }
                 });
             }
@@ -180,6 +187,7 @@ public class AtmosphereResourceStateRecovery implements AtmosphereInterceptor {
             if (t == null) {
                 t = track(r);
             }
+            logger.trace("Starting tracking the state of {} with broadcaster {}", r.uuid(), b.getID());
             t.add(b);
         }
 
@@ -187,21 +195,28 @@ public class AtmosphereResourceStateRecovery implements AtmosphereInterceptor {
         public void onRemoveAtmosphereResource(Broadcaster b, AtmosphereResource r) {
             // We track cancelled and resumed connection only.
             BroadcasterTracker t = states.get(r.uuid());
-            if (t != null && (r.getAtmosphereResourceEvent().isClosedByClient() || !r.isResumed())) {
-                t.remove(b);
+            AtmosphereResourceEvent e = r.getAtmosphereResourceEvent();
+            if (e.isClosedByClient() || !r.isResumed() && !e.isResumedOnTimeout()) {
+                logger.trace("Deleting the state of {} with broadcaster {}", r.uuid(), b.getID());
+                if (t != null) {
+                    t.remove(b);
+                }
             } else {
+                // The BroadcasterTracker was swapped
+                onAddAtmosphereResource(b, r);
                 logger.trace("Keeping the state of {} with broadcaster {}", r.uuid(), b.getID());
+                logger.trace("State for {} with broadcaster {}", r.uuid(), t != null ? t.ids() : "null");
             }
         }
     }
 
     public final static class BroadcasterTracker {
 
-        private final List<String> broadcasterIds;
+        private final ConcurrentLinkedQueue<String> broadcasterIds;
         private long tick;
 
         public BroadcasterTracker() {
-            this.broadcasterIds = new LinkedList<String>();
+            this.broadcasterIds = new ConcurrentLinkedQueue<String>();
             tick = System.currentTimeMillis();
         }
 
@@ -219,7 +234,7 @@ public class AtmosphereResourceStateRecovery implements AtmosphereInterceptor {
             return this;
         }
 
-        public List<String> ids() {
+        public ConcurrentLinkedQueue<String> ids() {
             return broadcasterIds;
         }
 
@@ -248,12 +263,12 @@ public class AtmosphereResourceStateRecovery implements AtmosphereInterceptor {
             Broadcaster b = factory.lookup(broadcasterID, false);
             BroadcasterCache cache;
             logger.trace("About to retrieve cached messages for resource {} with Broadcaster {}, tracked by " + b, r.uuid(), r.getBroadcaster());
-            if (force || (b != null && !b.getID().equalsIgnoreCase(r.getBroadcaster().getID()))) {
+            if (b != null && (force || !b.getID().equalsIgnoreCase(r.getBroadcaster().getID()))) {
                 // We cannot add the resource now. we need to first make sure there is no cached message.
                 cache = b.getBroadcasterConfig().getBroadcasterCache();
                 List<Object> t = cache.retrieveFromCache(b.getID(), r);
 
-                cachedMessages = b.getBroadcasterConfig().applyFilters(r, cachedMessages);
+                cachedMessages = b.getBroadcasterConfig().applyFilters(r, t);
                 if (t.size() > 0) {
                     logger.trace("Found Cached Messages For AtmosphereResource {} with Broadcaster {}", r.uuid(), broadcasterID);
                     cachedMessages.addAll(t);

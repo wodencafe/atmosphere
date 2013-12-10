@@ -13,15 +13,17 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package org.atmosphere.di;
+package org.atmosphere.interceptor;
 
 /**
- * Default injector which does nothing
+ * Old 8k Padding interceptor for Browser that needs whitespace when streaming is used.
  *
- * @author Mathieu Carbou
- * @since 0.7
+ * @author Jeanfrancois Arcand
  */
-final class NoopInjector implements Injector {
-    public void inject(Object o) {
+public class OldBrowserPaddingInterceptor extends PaddingAtmosphereInterceptor {
+
+    public OldBrowserPaddingInterceptor() {
+        super(8192);
     }
+
 }

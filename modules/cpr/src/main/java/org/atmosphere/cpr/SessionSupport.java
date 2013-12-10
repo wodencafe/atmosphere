@@ -26,7 +26,7 @@ public class SessionSupport implements HttpSessionListener {
 
     private final Logger logger = LoggerFactory.getLogger(SessionSupport.class);
 
-    public SessionSupport(){
+    public SessionSupport() {
     }
 
     @Override
@@ -39,12 +39,14 @@ public class SessionSupport implements HttpSessionListener {
         logger.trace("Session destroyed");
         try {
             HttpSession s = se.getSession();
-            for (Broadcaster b : BroadcasterFactory.getDefault().lookupAll()) {
-                for (AtmosphereResource r : b.getAtmosphereResources()) {
-                    if (r.session() != null && r.session().getId().equals(s.getId())) {
-                        AtmosphereResourceImpl.class.cast(r).session(null);
+            if (BroadcasterFactory.getDefault() != null) {
+                for (Broadcaster b : BroadcasterFactory.getDefault().lookupAll()) {
+                    for (AtmosphereResource r : b.getAtmosphereResources()) {
+                        if (r.session() != null && r.session().getId().equals(s.getId())) {
+                            AtmosphereResourceImpl.class.cast(r).session(null);
+                        }
                     }
-                }
+                } 
             }
         } catch (Throwable t) {
             logger.warn("", t);

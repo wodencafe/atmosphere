@@ -33,6 +33,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
+import static org.atmosphere.cpr.FrameworkConfig.INJECTED_ATMOSPHERE_RESOURCE;
+
 /**
  * Padding interceptor for Browser that needs whitespace when streaming is used.
  *
@@ -42,24 +44,33 @@ public class PaddingAtmosphereInterceptor extends AtmosphereInterceptorAdapter {
 
     private static final Logger logger = LoggerFactory.getLogger(PaddingAtmosphereInterceptor.class);
 
-    private static final byte[] padding;
-    private static final String paddingText;
+    private final byte[] padding;
+    private final String paddingText;
 
-    static {
+    public PaddingAtmosphereInterceptor(){
+        paddingText = confPadding(2048);
+        padding = paddingText.getBytes();
+    }
+
+    public PaddingAtmosphereInterceptor(int size){
+        paddingText = confPadding(size);
+        padding = paddingText.getBytes();
+    }
+
+    protected final static String confPadding(int size) {
         StringBuilder whitespace = new StringBuilder();
-        for (int i = 0; i < 8192; i++) {
+        for (int i = 0; i < size; i++) {
             whitespace.append(" ");
         }
         whitespace.append("\n");
-        paddingText = whitespace.toString();
-        padding = paddingText.getBytes();
+        return whitespace.toString();
     }
 
     private void writePadding(AtmosphereResponse response) {
         AtmosphereRequest request = response.request();
         if (request != null && request.getAttribute("paddingWritten") != null) return;
 
-        if (response.resource().transport().equals(TRANSPORT.STREAMING)) {
+        if (response.resource() != null && response.resource().transport().equals(TRANSPORT.STREAMING)) {
             request.setAttribute(FrameworkConfig.TRANSPORT_IN_USE, HeaderConfig.STREAMING_TRANSPORT);
             response.setContentType("text/plain");
         }
@@ -75,8 +86,18 @@ public class PaddingAtmosphereInterceptor extends AtmosphereInterceptorAdapter {
     @Override
     public Action inspect(final AtmosphereResource r) {
         final AtmosphereResponse response = r.getResponse();
+        final AtmosphereRequest request = r.getRequest();
 
-        if (r.transport().equals(TRANSPORT.STREAMING) || r.transport().equals(TRANSPORT.LONG_POLLING)) {
+        String uuid = request.getHeader(HeaderConfig.X_ATMOSPHERE_TRACKING_ID);
+        boolean padding = r.transport().equals(TRANSPORT.STREAMING) || r.transport().equals(TRANSPORT.LONG_POLLING);
+        if (uuid != null
+                && !uuid.equals("0")
+                && r.transport().equals(TRANSPORT.WEBSOCKET)
+                && request.getAttribute(INJECTED_ATMOSPHERE_RESOURCE) != null) {
+            padding = true;
+        }
+
+        if (padding) {
             r.addEventListener(new ForcePreSuspend(response));
 
             super.inspect(r);
@@ -87,7 +108,7 @@ public class PaddingAtmosphereInterceptor extends AtmosphereInterceptorAdapter {
                     private void padding() {
                         if (!r.isSuspended()) {
                             writePadding(response);
-                            r.getRequest().setAttribute("paddingWritten", "true");
+                            request.setAttribute("paddingWritten", "true");
                         }
                     }
 

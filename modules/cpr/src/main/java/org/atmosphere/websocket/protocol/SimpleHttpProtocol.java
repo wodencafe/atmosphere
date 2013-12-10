@@ -19,7 +19,6 @@ import org.atmosphere.cpr.ApplicationConfig;
 import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereRequest;
 import org.atmosphere.cpr.AtmosphereResourceImpl;
-import org.atmosphere.cpr.FrameworkConfig;
 import org.atmosphere.websocket.WebSocket;
 import org.atmosphere.websocket.WebSocketProcessor;
 import org.atmosphere.websocket.WebSocketProtocol;
@@ -28,9 +27,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+
+import static org.atmosphere.websocket.protocol.ProtocolUtil.constructRequest;
 
 /**
  * Like the {@link org.atmosphere.cpr.AsynchronousProcessor} class, this class is responsible for dispatching WebSocket messages to the
@@ -46,14 +45,11 @@ import java.util.Map;
 public class SimpleHttpProtocol implements WebSocketProtocol, Serializable {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleHttpProtocol.class);
-    private String contentType = "text/plain";
-    private String methodType = "POST";
-    private String delimiter = "@@";
-    private boolean destroyable;
+    protected String contentType = "text/plain";
+    protected String methodType = "POST";
+    protected String delimiter = "@@";
+    protected boolean destroyable;
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void configure(AtmosphereConfig config) {
         String contentType = config.getInitParameter(ApplicationConfig.WEBSOCKET_CONTENT_TYPE);
@@ -82,9 +78,6 @@ public class SimpleHttpProtocol implements WebSocketProtocol, Serializable {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public List<AtmosphereRequest> onMessage(WebSocket webSocket, String d) {
         AtmosphereResourceImpl resource = (AtmosphereResourceImpl) webSocket.resource();
@@ -92,8 +85,9 @@ public class SimpleHttpProtocol implements WebSocketProtocol, Serializable {
             logger.trace("The WebSocket has been closed before the message was processed.");
             return null;
         }
-        String pathInfo = resource.getRequest().getPathInfo();
-        String requestURI = resource.getRequest().getRequestURI();
+        AtmosphereRequest request = resource.getRequest();
+        String pathInfo = request.getPathInfo();
+        String requestURI = request.getRequestURI();
 
         if (d.startsWith(delimiter)) {
             int delimiterLength = delimiter.length();
@@ -105,33 +99,12 @@ public class SimpleHttpProtocol implements WebSocketProtocol, Serializable {
             }
         }
 
-        Map<String, Object> m = new HashMap<String, Object>();
-        m.put(FrameworkConfig.WEBSOCKET_SUBPROTOCOL, FrameworkConfig.SIMPLE_HTTP_OVER_WEBSOCKET);
-        // Propagate the original attribute to WebSocket message.
-        m.putAll(resource.getRequest().attributes());
-
         List<AtmosphereRequest> list = new ArrayList<AtmosphereRequest>();
-
-        // We need to create a new AtmosphereRequest as WebSocket message may arrive concurrently on the same connection.
-        list.add(new AtmosphereRequest.Builder()
-                .request(resource.getRequest())
-                .method(methodType)
-                .contentType(contentType)
-                .body(d)
-                .attributes(m)
-                .pathInfo(pathInfo)
-                .requestURI(requestURI)
-                .destroyable(destroyable)
-                .headers(resource.getRequest().headersMap())
-                .session(resource.session())
-                .build());
+        list.add(constructRequest(resource, pathInfo, requestURI, methodType, contentType, destroyable).body(d).build());
 
         return list;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public List<AtmosphereRequest> onMessage(WebSocket webSocket, byte[] d, final int offset, final int length) {
 
@@ -141,51 +114,23 @@ public class SimpleHttpProtocol implements WebSocketProtocol, Serializable {
             logger.trace("The WebSocket has been closed before the message was processed.");
             return null;
         }
-        String pathInfo = resource.getRequest().getPathInfo();
-        String requestURI = resource.getRequest().getRequestURI();
 
-
-        Map<String, Object> m = new HashMap<String, Object>();
-        m.put(FrameworkConfig.WEBSOCKET_SUBPROTOCOL, FrameworkConfig.SIMPLE_HTTP_OVER_WEBSOCKET);
-        // Propagate the original attribute to WebSocket message.
-        m.putAll(resource.getRequest().attributes());
-
+        AtmosphereRequest request = resource.getRequest();
         List<AtmosphereRequest> list = new ArrayList<AtmosphereRequest>();
-
-        // We need to create a new AtmosphereRequest as WebSocket message may arrive concurrently on the same connection.
-        list.add(new AtmosphereRequest.Builder()
-                .request(resource.getRequest())
-                .method(methodType)
-                .contentType(contentType)
-                .body(d, offset, length)
-                .attributes(m)
-                .pathInfo(pathInfo)
-                .requestURI(requestURI)
-                .destroyable(destroyable)
-                .headers(resource.getRequest().headersMap())
-                .session(resource.session())
-                .build());
+        list.add(constructRequest(resource, request.getPathInfo(), request.getRequestURI(), methodType, contentType, destroyable).body(d, offset, length).build());
 
         return list;
     }
 
-    /**
-     * {@inheritDoc}
-     */
+
     @Override
     public void onOpen(WebSocket webSocket) {
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void onClose(WebSocket webSocket) {
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void onError(WebSocket webSocket, WebSocketProcessor.WebSocketException t) {
         logger.warn(t.getMessage() + " Status {} Message {}", t.response().getStatus(), t.response().getStatusMessage());

@@ -75,8 +75,7 @@ import static org.atmosphere.cpr.HeaderConfig.X_ATMOSPHERE_ERROR;
 import static org.atmosphere.cpr.HeaderConfig.X_ATMOSPHERE_TRANSPORT;
 
 /**
- * Base class which implement the semantics of suspending and resuming of a
- * Comet/WebSocket Request.
+ * Base class which implement the semantics of suspending and resuming of a Comet/WebSocket Request.
  *
  * @author Jeanfrancois Arcand
  */
@@ -114,7 +113,9 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
                         long l = (Long) req.getAttribute(MAX_INACTIVE);
                         if (l > 0 && System.currentTimeMillis() - l > maxInactiveTime) {
                             try {
-                                logger.trace("Close detector disconnecting {}. Current size {}", req.resource(), aliveRequests.size());
+                                if (logger.isTraceEnabled()) {
+                                    logger.trace("Close detector disconnecting {}. Current size {}", req.resource(), aliveRequests.size());
+                                }
                                 AtmosphereResourceImpl r = (AtmosphereResourceImpl) aliveRequests.remove(req);
                                 cancelled(req, r.getResponse(false));
                             } catch (Throwable e) {
@@ -150,12 +151,11 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
     }
 
     /**
-     * All proprietary Comet based {@link Servlet} must invoke the suspended
-     * method when the first request comes in. The returned value, of type
-     * {@link Action}, tells the proprietary Comet {@link Servlet}
-     * to suspended or not the current {@link AtmosphereResponse}.
+     * All proprietary Comet based {@link Servlet} must invoke the suspended method when the first request comes in.
+     * The returned value, of type {@link Action}, tells the proprietary Comet {@link Servlet} to suspended or not the
+     * current {@link AtmosphereResponse}.
      *
-     * @param request  the {@link AtmosphereRequest}
+     * @param request the {@link AtmosphereRequest}
      * @param response the {@link AtmosphereResponse}
      * @return action the Action operation.
      * @throws java.io.IOException
@@ -207,6 +207,11 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
         }
         AtmosphereResourceImpl resource = configureWorkflow(null, handlerWrapper, req, res);
 
+        String v = req.getHeader(HeaderConfig.X_ATMO_BINARY);
+        if (v != null) {
+            resource.forceBinaryWrite(Boolean.valueOf(v));
+        }
+
         // Globally defined
         Action a = invokeInterceptors(config.framework().interceptors(), resource);
         if (a.type() != Action.TYPE.CONTINUE) {
@@ -222,7 +227,7 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
         // Remap occured.
         if (req.getAttribute(FrameworkConfig.NEW_MAPPING) != null) {
             req.removeAttribute(FrameworkConfig.NEW_MAPPING);
-            handlerWrapper = config.handlers().get(path(req));
+            handlerWrapper = map(req);
             if (handlerWrapper == null) {
                 logger.debug("Remap {}", resource.uuid());
                 throw new AtmosphereMappingException("Invalid state. No AtmosphereHandler maps request for " + req.getRequestURI());
@@ -334,13 +339,13 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
         for (AtmosphereInterceptor arc : c) {
             a = arc.inspect(r);
             if (a == null) {
-                logger.debug("Action was null for {}", arc);
+                logger.trace("Action was null for {}", arc);
                 a = Action.CANCELLED;
             }
 
             boolean skip = a.type() == SKIP_ATMOSPHEREHANDLER;
             if (skip) {
-                logger.debug("AtmosphereInterceptor {} asked to skip the AtmosphereHandler for {}", arc, r.uuid());
+                logger.trace("AtmosphereInterceptor {} asked to skip the AtmosphereHandler for {}", arc, r.uuid());
                 r.getRequest().setAttribute(SKIP_ATMOSPHEREHANDLER.name(), Boolean.TRUE);
             }
 
@@ -358,9 +363,7 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public void action(AtmosphereResourceImpl r) {
         if (trackActiveRequest) {
             aliveRequests.remove(r.getRequest(false));
@@ -386,13 +389,11 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
     }
 
     /**
-     * All proprietary Comet based {@link Servlet} must invoke the resume
-     * method when the Atmosphere's application decide to resume the {@link AtmosphereResponse}.
-     * The returned value, of type
-     * {@link Action}, tells the proprietary Comet {@link Servlet}
-     * to resume (again), suspended or do nothing with the current {@link AtmosphereResponse}.
+     * All proprietary Comet based {@link Servlet} must invoke the resume method when the Atmosphere's application
+     * decide to resume the {@link AtmosphereResponse}. The returned value, of type {@link Action}, tells the
+     * proprietary Comet {@link Servlet} to resume (again), suspended or do nothing with the current {@link AtmosphereResponse}.
      *
-     * @param request  the {@link AtmosphereRequest}
+     * @param request the {@link AtmosphereRequest}
      * @param response the {@link AtmosphereResponse}
      * @return action the Action operation.
      * @throws java.io.IOException
@@ -418,11 +419,9 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
     }
 
     /**
-     * All proprietary Comet based {@link Servlet} must invoke the timedout
-     * method when the underlying WebServer time out the {@link AtmosphereResponse}.
-     * The returned value, of type
-     * {@link Action}, tells the proprietary Comet {@link Servlet}
-     * to resume (again), suspended or do nothing with the current {@link AtmosphereResponse}.
+     * All proprietary Comet based {@link Servlet} must invoke the timedout method when the underlying WebServer time
+     * out the {@link AtmosphereResponse}. The returned value, of type {@link Action}, tells the proprietary
+     * Comet {@link Servlet} to resume (again), suspended or do nothing with the current {@link AtmosphereResponse}.
      *
      * @param req the {@link AtmosphereRequest}
      * @param res the {@link AtmosphereResponse}
@@ -463,7 +462,7 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
     /**
      * Cancel or times out an {@link AtmosphereResource} by invoking it's associated {@link AtmosphereHandler#onStateChange(AtmosphereResourceEvent)}
      *
-     * @param r         an {@link AtmosphereResource}
+     * @param r an {@link AtmosphereResource}
      * @param cancelled true if cancelled, false if timedout
      * @return true if the operation was executed.
      */
@@ -484,7 +483,6 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
                             e.setCancelled(true);
                         } else {
                             e.setIsResumedOnTimeout(true);
-
                             Broadcaster b = r.getBroadcaster();
                             if (b instanceof DefaultBroadcaster) {
                                 ((DefaultBroadcaster) b).broadcastOnResume(r);
@@ -495,14 +493,6 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
                         }
                     }
                     invokeAtmosphereHandler(impl);
-                    try {
-                        impl.getResponse().getOutputStream().close();
-                    } catch (Throwable t) {
-                        try {
-                            impl.getResponse().getWriter().close();
-                        } catch (Throwable t2) {
-                        }
-                    }
                 } catch (Throwable ex) {
                     // Something wrong happened, ignore the exception
                     logger.trace("Failed to cancel resource: {}", impl.uuid(), ex);
@@ -510,6 +500,14 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
                     try {
                         impl.notifyListeners();
                         impl.setIsInScope(false);
+                        try {
+                            impl.getResponse().getOutputStream().close();
+                        } catch (Throwable t) {
+                            try {
+                                impl.getResponse().getWriter().close();
+                            } catch (Throwable t2) {
+                            }
+                        }
                         impl.cancel();
                     } catch (Throwable t) {
                         logger.trace("completeLifecycle", t);
@@ -520,13 +518,13 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
             }
             return true;
         } else {
-            logger.debug("AtmosphereResource was null, failed to cancel AtmosphereRequest {}");
+            logger.trace("AtmosphereResource {} was already cancelled or gc", r != null ? r.uuid() : "null");
             return false;
         }
     }
 
     /**
-     * Invoke the associated {@link AtmosphereHandler}. This method must be synchronized on an AtmosphereResource
+     * Invoke the associated {@link AtmosphereHandler}. This method must be synchronized on an AtmosphereResource.
      *
      * @param r a {@link AtmosphereResourceImpl}
      * @throws IOException
@@ -565,9 +563,8 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
     }
 
     /**
-     * All proprietary Comet based {@link Servlet} must invoke the cancelled
-     * method when the underlying WebServer detect that the client closed
-     * the connection.
+     * All proprietary Comet based {@link Servlet} must invoke the cancelled method when the underlying WebServer
+     * detect that the client closed the connection.
      *
      * @param req the {@link AtmosphereRequest}
      * @param res the {@link AtmosphereResponse}
@@ -603,9 +600,9 @@ public abstract class AsynchronousProcessor implements AsyncSupport<AtmosphereRe
     }
 
     /**
-     * An Callback class that can be used by Framework integrator to handle the close/timedout/resume life cycle
-     * of an {@link AtmosphereResource}. This class support only support {@link AsyncSupport} implementation that
-     * extends {@link AsynchronousProcessor}
+     * A callback class that can be used by Framework integrator to handle the close/timedout/resume life cycle
+     * of an {@link AtmosphereResource}. This class only supports {@link AsyncSupport} implementation that
+     * extends {@link AsynchronousProcessor}.
      */
     public final static class AsynchronousProcessorHook {
 

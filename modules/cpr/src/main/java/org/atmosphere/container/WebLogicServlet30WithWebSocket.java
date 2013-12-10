@@ -13,22 +13,22 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package org.atmosphere.di;
+package org.atmosphere.container;
 
-/**
- * Represent an injector, capable of providing instances or inject resources into objects.
- * Implementations are likely to delegate to some DI frameworks like Google Guice or Spring
- *
- * @author Mathieu Carbou
- * @since 0.7
- */
-public interface Injector {
+import org.atmosphere.cpr.AtmosphereConfig;
 
-    /**
-     * Asks the underlying DI framework to inject resources into this instance. This method can be used when instances
-     * are not created by the DI framework but with Atmosphere instead.
-     *
-     * @param o The instance to inject
-     */
-    void inject(Object o);
+public class WebLogicServlet30WithWebSocket extends Servlet30CometSupport {
+
+    public WebLogicServlet30WithWebSocket(AtmosphereConfig config) {
+        super(config);
+    }
+
+    public boolean supportWebSocket() {
+        return true;
+    }
+
+    @Override
+    public String getContainerName() {
+        return super.getContainerName() + " using javax.servlet/3.0 and Native WebSocket API";
+    }
 }

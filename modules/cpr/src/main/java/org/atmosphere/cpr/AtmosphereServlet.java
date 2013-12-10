@@ -15,7 +15,6 @@
  */
 package org.atmosphere.cpr;
 
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,9 +27,9 @@ import java.io.IOException;
 
 /**
  * AtmosphereServlet that use Servlet 3.0 Async API when available, and fallback to native comet support if not available.
- * For Tomcat6/7 and JBossWeb Native support, use {@link AtmosphereNativeCometServlet}.
- * <p></p>
- * If Servlet 3.0 or Native API not found, Atmosphere will use {@link org.atmosphere.container.BlockingIOCometSupport}
+ * For Tomcat6/7 and JBossWeb Native support, use atmosphere-native dependencies instead.
+ * <p/>
+ * If Servlet 3.0 or native API isn't found, Atmosphere will use {@link org.atmosphere.container.BlockingIOCometSupport}.
  *
  * @author Jeanfrancois Arcand
  */
@@ -38,6 +37,8 @@ public class AtmosphereServlet extends HttpServlet {
 
     protected static final Logger logger = LoggerFactory.getLogger(AtmosphereServlet.class);
     protected AtmosphereFramework framework;
+    protected boolean isFilter;
+    protected boolean autoDetectHandlers;
 
     /**
      * Create an Atmosphere Servlet.
@@ -58,28 +59,52 @@ public class AtmosphereServlet extends HttpServlet {
     /**
      * Create an Atmosphere Servlet.
      *
-     * @param isFilter true if this instance is used as an {@link org.atmosphere.cpr.AtmosphereFilter}
+     * @param isFilter           true if this instance is used as an {@link org.atmosphere.cpr.AtmosphereFilter}
+     * @param autoDetectHandlers
      */
     public AtmosphereServlet(boolean isFilter, boolean autoDetectHandlers) {
-        framework = new AtmosphereFramework(isFilter, autoDetectHandlers);
+        this.isFilter = isFilter;
+        this.autoDetectHandlers = autoDetectHandlers;
     }
 
     @Override
     public void destroy() {
-        framework.destroy();
+        if (framework != null) {
+            framework.destroy();
+            framework = null;
+        }
     }
 
+    @Override
     public void init(final ServletConfig sc) throws ServletException {
+        configureFramework(sc);
         super.init(sc);
+    }
+
+    protected AtmosphereServlet configureFramework(ServletConfig sc) throws ServletException {
+        if (framework == null) {
+            framework = (AtmosphereFramework) sc.getServletContext().getAttribute(AtmosphereFramework.class.getName());
+            if (framework == null) {
+                framework = newAtmosphereFramework();
+            }
+        }
         framework.init(sc);
+        return this;
+    }
+
+    protected AtmosphereFramework newAtmosphereFramework() {
+        return new AtmosphereFramework(isFilter, autoDetectHandlers);
     }
 
     public AtmosphereFramework framework() {
+        if (framework == null) {
+            framework = newAtmosphereFramework();
+        }
         return framework;
     }
 
     /**
-     * Delegate the request processing to an instance of {@link org.atmosphere.cpr.AsyncSupport}
+     * Delegate the request processing to an instance of {@link org.atmosphere.cpr.AsyncSupport}.
      *
      * @param req the {@link javax.servlet.http.HttpServletRequest}
      * @param res the {@link javax.servlet.http.HttpServletResponse}
@@ -107,7 +132,7 @@ public class AtmosphereServlet extends HttpServlet {
     }
 
     /**
-     * Delegate the request processing to an instance of {@link org.atmosphere.cpr.AsyncSupport}
+     * Delegate the request processing to an instance of {@link org.atmosphere.cpr.AsyncSupport}.
      *
      * @param req the {@link javax.servlet.http.HttpServletRequest}
      * @param res the {@link javax.servlet.http.HttpServletResponse}
@@ -121,7 +146,7 @@ public class AtmosphereServlet extends HttpServlet {
     }
 
     /**
-     * Delegate the request processing to an instance of {@link org.atmosphere.cpr.AsyncSupport}
+     * Delegate the request processing to an instance of {@link org.atmosphere.cpr.AsyncSupport}.
      *
      * @param req the {@link javax.servlet.http.HttpServletRequest}
      * @param res the {@link javax.servlet.http.HttpServletResponse}
@@ -135,7 +160,7 @@ public class AtmosphereServlet extends HttpServlet {
     }
 
     /**
-     * Delegate the request processing to an instance of {@link org.atmosphere.cpr.AsyncSupport}
+     * Delegate the request processing to an instance of {@link org.atmosphere.cpr.AsyncSupport}.
      *
      * @param req the {@link javax.servlet.http.HttpServletRequest}
      * @param res the {@link javax.servlet.http.HttpServletResponse}
@@ -149,7 +174,7 @@ public class AtmosphereServlet extends HttpServlet {
     }
 
     /**
-     * Delegate the request processing to an instance of {@link org.atmosphere.cpr.AsyncSupport}
+     * Delegate the request processing to an instance of {@link org.atmosphere.cpr.AsyncSupport}.
      *
      * @param req the {@link javax.servlet.http.HttpServletRequest}
      * @param res the {@link javax.servlet.http.HttpServletResponse}
@@ -163,7 +188,7 @@ public class AtmosphereServlet extends HttpServlet {
     }
 
     /**
-     * Delegate the request processing to an instance of {@link org.atmosphere.cpr.AsyncSupport}
+     * Delegate the request processing to an instance of {@link org.atmosphere.cpr.AsyncSupport}.
      *
      * @param req the {@link javax.servlet.http.HttpServletRequest}
      * @param res the {@link javax.servlet.http.HttpServletResponse}

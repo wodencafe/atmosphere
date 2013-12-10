@@ -20,20 +20,25 @@ import org.atmosphere.cpr.ApplicationConfig;
 import org.atmosphere.cpr.AtmosphereFramework;
 import org.atmosphere.cpr.AtmosphereRequest;
 import org.atmosphere.cpr.AtmosphereResponse;
+import org.atmosphere.cpr.AtmosphereServlet;
+import org.atmosphere.util.IOUtils;
 import org.atmosphere.websocket.WebSocket;
 import org.atmosphere.websocket.WebSocketEventListener;
 import org.atmosphere.websocket.WebSocketProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.servlet.http.HttpSession;
 import javax.websocket.CloseReason;
 import javax.websocket.Endpoint;
 import javax.websocket.EndpointConfig;
 import javax.websocket.MessageHandler;
 import javax.websocket.Session;
+import javax.websocket.server.HandshakeRequest;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.atmosphere.cpr.ApplicationConfig.ALLOW_QUERYSTRING_AS_REQUEST;
@@ -49,6 +54,8 @@ public class JSR356Endpoint extends Endpoint {
     private final AtmosphereFramework framework;
     private WebSocket webSocket;
     private final int webSocketWriteTimeout;
+    private String servletPath = "";
+    private HandshakeRequest handshakeRequest;
 
     public JSR356Endpoint(AtmosphereFramework framework, WebSocketProcessor webSocketProcessor) {
         this.framework = framework;
@@ -78,6 +85,13 @@ public class JSR356Endpoint extends Endpoint {
         } else {
             maxTextBufferSize = -1;
         }
+
+        servletPath = IOUtils.guestServletPath(framework, AtmosphereServlet.class, getClass());
+    }
+
+    public JSR356Endpoint handshakeRequest(HandshakeRequest handshakeRequest) {
+        this.handshakeRequest = handshakeRequest;
+        return this;
     }
 
     @Override
@@ -98,25 +112,55 @@ public class JSR356Endpoint extends Endpoint {
 
         webSocket = new JSR356WebSocket(session, framework.getAtmosphereConfig());
 
-        // TODO: This is quite bogus!
         Map<String, String> headers = new HashMap<String, String>();
-        headers.put("Sec-WebSocket-Version", "13");
-        headers.put("Connection", "Upgrade");
-        headers.put("Upgrade", "websocket");
+        for (Map.Entry<String, List<String>> e : handshakeRequest.getHeaders().entrySet()) {
+            headers.put(e.getKey(), e.getValue().size() > 0 ? e.getValue().get(0) : "");
+        }
 
-        StringBuffer pathInfo = new StringBuffer("/");
-        for (Map.Entry<String, String> e : session.getPathParameters().entrySet()) {
-            pathInfo.append(e.getValue());
+        String pathInfo = "";
+        StringBuffer p = new StringBuffer("/");
+        try {
+            boolean append = true;
+            for (Map.Entry<String, String> e : session.getPathParameters().entrySet()) {
+                // Glasfish return reverse path!!!
+                if (append && !e.getKey().equalsIgnoreCase("{path}")) {
+                    append = false;
+                }
+
+                if (append) {
+                    p.append(e.getValue()).append("/");
+                } else {
+                    p.insert(0, e.getValue()).insert(0, "/");
+                }
+            }
+            if (p.length() > 1) {
+                p.deleteCharAt(p.length() - 1);
+            }
+
+            pathInfo = p.toString();
+            if (!pathInfo.equals(servletPath) && pathInfo.length() > servletPath.length()) {
+                pathInfo = p.toString().substring(servletPath.length());
+            } else if (pathInfo.equals(servletPath)) {
+                pathInfo = null;
+            }
+        } catch (Exception ex) {
+            logger.warn("Unexpected path decoding", ex);
         }
 
         try {
-
+            String requestUri = session.getRequestURI().toASCIIString();
+            if (requestUri.contains("?")) {
+                requestUri = requestUri.substring(0, requestUri.indexOf("?"));
+            }
             request = new AtmosphereRequest.Builder()
-                    .requestURI(session.getRequestURI().toASCIIString())
-                    .requestURL(session.getRequestURI().toASCIIString())
+                    .requestURI(requestUri)
+                    .requestURL(requestUri)
                     .headers(headers)
+                    .session((HttpSession) handshakeRequest.getHttpSession())
+                    .servletPath(servletPath)
                     .contextPath(framework.getServletContext().getContextPath())
-                    .pathInfo(pathInfo.toString())
+                    .pathInfo(pathInfo)
+                    .userPrincipal(session.getUserPrincipal())
                     .build()
                     .queryString(session.getQueryString());
 

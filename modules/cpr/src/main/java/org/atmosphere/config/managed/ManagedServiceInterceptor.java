@@ -21,33 +21,28 @@ import org.atmosphere.cpr.Action;
 import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereFramework.AtmosphereHandlerWrapper;
 import org.atmosphere.cpr.AtmosphereHandler;
+import org.atmosphere.cpr.AtmosphereInterceptorAdapter;
 import org.atmosphere.cpr.AtmosphereRequest;
 import org.atmosphere.cpr.AtmosphereResource;
 import org.atmosphere.cpr.Broadcaster;
 import org.atmosphere.cpr.FrameworkConfig;
 import org.atmosphere.handler.AnnotatedProxy;
-import org.atmosphere.interceptor.BroadcastOnPostAtmosphereInterceptor;
 import org.atmosphere.interceptor.InvokationOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-
 /**
- * Handle {@link Singleton} for {@link ManagedService}
- * processing.
+ * Handle {@link Singleton} for {@link ManagedService} processing.
  *
  * @author Jeanfrancois Arcand
  */
-public class ManagedServiceInterceptor extends BroadcastOnPostAtmosphereInterceptor {
+public class ManagedServiceInterceptor extends AtmosphereInterceptorAdapter {
 
     private final static Logger logger = LoggerFactory.getLogger(ManagedServiceInterceptor.class);
-    private ManagedAtmosphereHandler proxy;
     private AtmosphereConfig config;
     private boolean wildcardMapping = false;
 
-    public ManagedServiceInterceptor(ManagedAtmosphereHandler proxy) {
-        this.proxy = proxy;
+    public ManagedServiceInterceptor() {
     }
 
     @Override
@@ -114,24 +109,20 @@ public class ManagedServiceInterceptor extends BroadcastOnPostAtmosphereIntercep
                 // ManagedService
                 if (AnnotatedProxy.class.isAssignableFrom(w.atmosphereHandler.getClass())) {
                     AnnotatedProxy ap = AnnotatedProxy.class.cast(w.atmosphereHandler);
-                    if (ap.target().getClass().getAnnotation(ManagedService.class) != null) {
-                        String targetPath = ap.target().getClass().getAnnotation(ManagedService.class).path();
+                    ManagedService a = ap.target().getClass().getAnnotation(ManagedService.class);
+                    if (a != null) {
+                        String targetPath = a.path();
                         if (targetPath.indexOf("{") != -1 && targetPath.indexOf("}") != -1) {
                             try {
-                                synchronized (config.handlers()) {
-
-                                    boolean singleton = ap.target().getClass().getAnnotation(Singleton.class) != null;
-                                    if (!singleton) {
-                                        ManagedAtmosphereHandler h = (ManagedAtmosphereHandler) w.atmosphereHandler.getClass().getConstructor(Object.class)
-                                                .newInstance(ap.target().getClass().newInstance());
-
-                                        // Quite dangerous
-                                        w.interceptors.set(0, new ManagedServiceInterceptor(h));
-
-                                        config.framework().addAtmosphereHandler(path, h, w.interceptors);
-                                    } else {
-                                        config.framework().addAtmosphereHandler(path, w.atmosphereHandler, w.interceptors);
-                                    }
+                                boolean singleton = ap.target().getClass().getAnnotation(Singleton.class) != null;
+                                if (!singleton) {
+                                    ManagedAtmosphereHandler h = config.framework().newClassInstance(ManagedAtmosphereHandler.class);
+                                    h.configure(config, config.framework().newClassInstance(ap.target().getClass()));
+                                    config.framework().addAtmosphereHandler(path, h,
+                                            config.getBroadcasterFactory().lookup(a.broadcaster(), path, true), w.interceptors);
+                                } else {
+                                    config.framework().addAtmosphereHandler(path, w.atmosphereHandler,
+                                            config.getBroadcasterFactory().lookup(a.broadcaster(), path, true), w.interceptors);
                                 }
                                 request.setAttribute(FrameworkConfig.NEW_MAPPING, "true");
                             } catch (Throwable e) {
@@ -145,32 +136,12 @@ public class ManagedServiceInterceptor extends BroadcastOnPostAtmosphereIntercep
     }
 
     @Override
-    public void postInspect(AtmosphereResource r) {
-        if (proxy != null && r.getRequest().getMethod().equalsIgnoreCase("POST")) {
-            StringBuilder b = read(r);
-            if (b.length() > 0) {
-                Object o = null;
-                try {
-                    o = proxy.invoke(r, b.toString());
-                } catch (IOException e) {
-                    logger.error("", e);
-                }
-                if (o != null) {
-                    r.getBroadcaster().broadcast(o);
-                }
-            } else {
-                logger.warn("{} received an empty body", ManagedServiceInterceptor.class.getSimpleName());
-            }
-        }
-    }
-
-    @Override
     public PRIORITY priority() {
         return InvokationOrder.AFTER_DEFAULT;
     }
 
     @Override
-    public String toString(){
+    public String toString() {
         return "@ManagedService Interceptor";
     }
 }

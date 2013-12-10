@@ -21,7 +21,6 @@ import org.atmosphere.container.JBossWebCometSupport;
 import org.atmosphere.container.JBossWebSocketSupport;
 import org.atmosphere.container.Tomcat7CometSupport;
 import org.atmosphere.container.TomcatCometSupport;
-import org.atmosphere.di.ServletContextProvider;
 import org.jboss.servlet.http.HttpEvent;
 import org.jboss.servlet.http.HttpEventServlet;
 import org.slf4j.Logger;
@@ -43,7 +42,7 @@ import static org.atmosphere.cpr.HeaderConfig.WEBSOCKET_UPGRADE;
  *
  * @author Jeanfrancois Arcand
  */
-public class AtmosphereServlet extends HttpServlet implements CometProcessor, HttpEventServlet, ServletContextProvider, org.apache.catalina.comet.CometProcessor {
+public class AtmosphereServlet extends HttpServlet implements CometProcessor, HttpEventServlet, org.apache.catalina.comet.CometProcessor {
 
     protected static final Logger logger = LoggerFactory.getLogger(AtmosphereServlet.class);
     protected AtmosphereFramework framework;
@@ -75,7 +74,10 @@ public class AtmosphereServlet extends HttpServlet implements CometProcessor, Ht
 
     @Override
     public void destroy() {
-        framework.destroy();
+        if (framework != null) {
+            framework.destroy();
+            framework = null;
+        }
     }
 
     public void init(final ServletConfig sc) throws ServletException {
@@ -209,8 +211,8 @@ public class AtmosphereServlet extends HttpServlet implements CometProcessor, Ht
                         AsyncSupport current = framework.asyncSupport;
                         logger.warn("TomcatCometSupport is enabled, switching to it");
                         framework.asyncSupport = new TomcatCometSupport(framework.config);
-                        if(current instanceof AsynchronousProcessor) {
-                            ((AsynchronousProcessor)current).shutdown();
+                        if (current instanceof AsynchronousProcessor) {
+                            ((AsynchronousProcessor) current).shutdown();
                         }
                         framework.asyncSupport.init(framework.config.getServletConfig());
                     }
@@ -241,8 +243,8 @@ public class AtmosphereServlet extends HttpServlet implements CometProcessor, Ht
                         AsyncSupport current = framework.asyncSupport;
                         logger.warn("TomcatCometSupport7 is enabled, switching to it");
                         framework.asyncSupport = new Tomcat7CometSupport(framework.config);
-                        if(current instanceof AsynchronousProcessor) {
-                            ((AsynchronousProcessor)current).shutdown();
+                        if (current instanceof AsynchronousProcessor) {
+                            ((AsynchronousProcessor) current).shutdown();
                         }
                         framework.asyncSupport.init(framework.config.getServletConfig());
                     }
@@ -272,7 +274,7 @@ public class AtmosphereServlet extends HttpServlet implements CometProcessor, Ht
             }
         }
 
-        if (webSocketSupported){
+        if (webSocketSupported) {
             cometEvent.close();
         }
     }
@@ -298,14 +300,16 @@ public class AtmosphereServlet extends HttpServlet implements CometProcessor, Ht
                     AsyncSupport current = framework.asyncSupport;
                     logger.warn("JBossWebCometSupport is enabled, switching to it");
                     framework.asyncSupport = new JBossWebCometSupport(framework.config);
-                    if(current instanceof AsynchronousProcessor) {
-                        ((AsynchronousProcessor)current).shutdown();
+                    if (current instanceof AsynchronousProcessor) {
+                        ((AsynchronousProcessor) current).shutdown();
                     }
                     framework.asyncSupport.init(framework.config.getServletConfig());
                 }
             }
         }
-        if (framework.asyncSupport.getClass().equals(JBossWebSocketSupport.class)) {
+
+        boolean isWebSocket = req.getHeader("Upgrade") == null ? false : true;
+        if (isWebSocket && framework.asyncSupport.getClass().equals(JBossWebSocketSupport.class)) {
             logger.trace("Dispatching websocket event: " + httpEvent);
             ((JBossWebSocketSupport) framework.asyncSupport).dispatch(httpEvent);
         } else {

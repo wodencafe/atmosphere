@@ -51,17 +51,24 @@
  */
 package org.atmosphere.handler;
 
+import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereHandler;
 import org.atmosphere.cpr.AtmosphereResource;
 import org.atmosphere.cpr.AtmosphereServletProcessor;
 import org.atmosphere.cpr.FrameworkConfig;
-import org.atmosphere.di.InjectorProvider;
 import org.atmosphere.util.AtmosphereFilterChain;
 import org.atmosphere.util.FilterConfigImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.servlet.*;
+import javax.servlet.Filter;
+import javax.servlet.FilterChain;
+import javax.servlet.Servlet;
+import javax.servlet.ServletConfig;
+import javax.servlet.ServletContext;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
@@ -78,7 +85,7 @@ import java.util.Map;
  * to a set of {@link FilterChain} and {@link Servlet#service(javax.servlet.ServletRequest, javax.servlet.ServletResponse)}
  * and store the {@link AtmosphereResource} as a {@link org.atmosphere.cpr.AtmosphereRequest#getAttribute(String)} attribute named
  * {@link org.atmosphere.cpr.FrameworkConfig#ATMOSPHERE_RESOURCE}. The {@link AtmosphereResource} can later be retrieved
- * and used to supend/resume and broadcast
+ * and used to suspend/resume and broadcast.
  *
  * @author Jeanfrancois Arcand
  */
@@ -94,6 +101,7 @@ public class ReflectorServletProcessor extends AbstractReflectorAtmosphereHandle
     private final FilterChainServletWrapper wrapper = new FilterChainServletWrapper();
     private final AtmosphereFilterChain filterChain = new AtmosphereFilterChain();
     private Servlet servlet;
+    private AtmosphereConfig config;
 
     public ReflectorServletProcessor() {
     }
@@ -121,13 +129,13 @@ public class ReflectorServletProcessor extends AbstractReflectorAtmosphereHandle
             throws InstantiationException, IllegalAccessException, ClassNotFoundException {
         if (servletClassName != null && servlet == null) {
             try {
-                servlet = (Servlet) urlC.loadClass(servletClassName).newInstance();
+                servlet = (Servlet) config.framework().newClassInstance(urlC.loadClass(servletClassName));
             } catch (NullPointerException ex) {
                 // We failed to load the servlet, let's try directly.
-                servlet = (Servlet) Thread.currentThread().getContextClassLoader()
-                        .loadClass(servletClassName).newInstance();
+                servlet = (Servlet) config.framework().newClassInstance(Thread.currentThread().getContextClassLoader()
+                        .loadClass(servletClassName));
+
             }
-            InjectorProvider.getInjector().inject(servlet);
         }
 
         logger.info("Installing Servlet {}", servletClassName);
@@ -141,7 +149,6 @@ public class ReflectorServletProcessor extends AbstractReflectorAtmosphereHandle
             String fClass = fClassAndName.getKey();
             String filterName = fClassAndName.getValue();
             Filter f = loadFilter(urlC, fClass);
-            InjectorProvider.getInjector().inject(f);
             if (filterName == null) {
                 if (sc.getInitParameter(APPLICATION_NAME) != null) {
                     filterName = sc.getInitParameter(APPLICATION_NAME);
@@ -161,11 +168,11 @@ public class ReflectorServletProcessor extends AbstractReflectorAtmosphereHandle
             throws InstantiationException, IllegalAccessException, ClassNotFoundException {
         Filter f;
         try {
-            f = (Filter) urlC.loadClass(fClass).newInstance();
+            f = (Filter) config.framework().newClassInstance(urlC.loadClass(fClass));
         } catch (NullPointerException ex) {
             // We failed to load the Filter, let's try directly.
-            f = (Filter) Thread.currentThread().getContextClassLoader()
-                    .loadClass(fClass).newInstance();
+            f = (Filter) config.framework().newClassInstance(Thread.currentThread().getContextClassLoader()
+                    .loadClass(fClass));
         }
         return f;
     }
@@ -201,19 +208,22 @@ public class ReflectorServletProcessor extends AbstractReflectorAtmosphereHandle
         }
     }
 
-    public void init(ServletConfig sc) throws ServletException {
+    @Override
+    public void init(AtmosphereConfig config) throws ServletException {
+        this.config = config;
         try {
-            loadWebApplication(sc);
+            loadWebApplication(config.getServletConfig());
         } catch (Exception ex) {
             throw new ServletException(ex);
         }
-        wrapper.init(sc);
+        wrapper.init(config.getServletConfig());
     }
 
     public void addFilter(Filter filter) {
         filters.add(filter);
     }
 
+    @Override
     public void destroy() {
         filterChain.destroy();
     }
@@ -262,6 +272,7 @@ public class ReflectorServletProcessor extends AbstractReflectorAtmosphereHandle
      * Add a FilterClass. Since we are using Reflection to call this method,
      * what we are really doing is addFilterClass.
      * <p/>
+     *
      * @param filterClass
      */
     public void setFilterClassName(String filterClass) {
@@ -274,7 +285,7 @@ public class ReflectorServletProcessor extends AbstractReflectorAtmosphereHandle
      * what we are really doing is addFilterClass.
      *
      * @param filterClass class name of the filter to instantiate.
-     * @param filterName mapping name of the filter to instantiate
+     * @param filterName  mapping name of the filter to instantiate
      */
     public void addFilterClassName(String filterClass, String filterName) {
         if (filterClass == null || filterName == null) return;

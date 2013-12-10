@@ -13,29 +13,30 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  *//* AnnotationDetector.java
- * 
- ******************************************************************************
- *
- * Created: Oct 10, 2011
- * Character encoding: UTF-8
- * 
- * Copyright (c) 2011 - XIAM Solutions B.V. The Netherlands, http://www.xiam.nl
- * 
- ********************************* LICENSE ************************************
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+  *
+  * Created: 2011-10-10 (Year-Month-Day)
+  * Character encoding: UTF-8
+  *
+  ****************************************** LICENSE *******************************************
+  *
+  * Copyright (c) 2011 - 2013 XIAM Solutions B.V. (http://www.xiam.nl)
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+  * you may not use this file except in compliance with the License.
+  * You may obtain a copy of the License at
+  *
+  *      http://www.apache.org/licenses/LICENSE-2.0
+  *
+  * Unless required by applicable law or agreed to in writing, software
+  * distributed under the License is distributed on an "AS IS" BASIS,
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  */
 package org.atmosphere.util.annotation;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.DataInput;
 import java.io.File;
@@ -43,6 +44,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLDecoder;
@@ -50,25 +52,20 @@ import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * {@code AnnotationDetector} reads Java Class File (".class") files and reports the
  * encountered annotations via a simple, developer friendly API.
- * <br/>
- * Main advantages of this library compared with similar solutions are:
- * <ul>
- * <li><u>light weight</u> (no dependencies, simple API, 15 kb jar file)</li>
- * <li><u>very fast</u> (fastest annotation detection library as far as i know)</li>
- * </ul>
  * <p/>
  * A Java Class File consists of a stream of 8-bit bytes. All 16-bit, 32-bit, and 64-bit
  * quantities are constructed by reading in two, four, and eight consecutive 8-bit
  * bytes, respectively. Multi byte data items are always stored in big-endian order,
  * where the high bytes come first. In the Java and Java 2 platforms, this format is
  * supported by interfaces {@link java.io.DataInput} and {@link java.io.DataOutput}.
- * <br/>
+ * <p/>
  * A class file consists of a single ClassFile structure:
  * <pre>
  * ClassFile {
@@ -100,25 +97,27 @@ import java.util.Set;
  * </pre>
  * References:
  * <ul>
- * <li><a href="http://en.wikipedia.org/wiki/Java_class_file">Java class file (Wikipedia)</a> (Gentle Introduction);</li>
- * <li><a href="http://download.oracle.com/otndocs/jcp/jcfsu-1.0-fr-eval-oth-JSpec/">Class File
- * Format Specification</a> (Java 6 version) and the
- * <a href="http://java.sun.com/docs/books/jvms/second_edition/html/ClassFile.doc.html">Java VM
- * Specification (Chapter 4)</a> for the real work.</li>
- * <li><a href="http://stackoverflow.com/questions/259140">scanning java annotations at runtime</a>.</li>
+ * <li><a href="http://en.wikipedia.org/wiki/Java_class_file">Java class file (Wikipedia)</a>
+ * (Gentle Introduction);
+ * <li><a href="http://download.oracle.com/otndocs/jcp/jcfsu-1.0-fr-eval-oth-JSpec/">Class
+ * File Format Specification</a> (Java 6 version) and the
+ * <a href="http://java.sun.com/docs/books/jvms/second_edition/html/ClassFile.doc.html">Java
+ * VM Specification (Chapter 4)</a> for the real work.
+ * <li><a href="http://stackoverflow.com/questions/259140">scanning java annotations at
+ * runtime</a>.
  * </ul>
+ * <p/>
  * Similar projects / libraries:
  * <ul>
- * <li><a href="http://community.jboss.org/wiki/MCScanninglib">JBoss MC Scanning lib</a>;</li>
- * <li><a href="http://code.google.com/p/reflections/">Google Reflections</a>, in fact an improved
- * version of <a href="http://scannotation.sourceforge.net/">scannotation</a>;</li>
- * <li><a herf="https://github.com/ngocdaothanh/annovention">annovention</a>, improved version of
- * the <a href="http://code.google.com/p/annovention">original Annovention</a> project. Available
- * from maven: {@code tv.cntt:annovention:1.2};</li>
- * <li>If using the Spring Framework,
- * <a href="http://static.springsource.org/spring/docs/2.5.x/api/org/springframework/context/annotation/ClassPathScanningCandidateComponentProvider.html">this</a>
- * is the way to go.</li>
+ * <li><a href="http://community.jboss.org/wiki/MCScanninglib">JBoss MC Scanning lib</a>;
+ * <li><a href="http://code.google.com/p/reflections/">Google Reflections</a>, in fact an
+ * improved version of <a href="http://scannotation.sourceforge.net/">scannotation</a>;
+ * <li><a herf="https://github.com/ngocdaothanh/annovention">annovention</a>, improved version
+ * of the <a href="http://code.google.com/p/annovention">original Annovention</a> project.
+ * Available from maven: {@code tv.cntt:annovention:1.2};
+ * <li>If using the Spring Framework, use {@code ClassPathScanningCandidateComponentProvider}
  * </ul>
+ * <p/>
  * All above mentioned projects make use of a byte code manipulation library (like BCEL,
  * ASM or Javassist).
  *
@@ -142,6 +141,9 @@ public final class AnnotationDetector {
 
     }
 
+    /**
+     * A {@code Reporter} for type annotations.
+     */
     public interface TypeReporter extends Reporter {
 
         /**
@@ -152,28 +154,37 @@ public final class AnnotationDetector {
 
     }
 
+    /**
+     * A {@code Reporter} for field annotations.
+     */
     public interface FieldReporter extends Reporter {
 
         /**
          * This call back method is used to report an field level {@code Annotation}.
          * Only {@code Annotation}s, specified by {@link #annotations()} are reported!
          */
-        void reportFieldAnnotation(Class<? extends Annotation> annotation, String className, String fieldName);
+        void reportFieldAnnotation(Class<? extends Annotation> annotation, String className,
+                                   String fieldName);
 
     }
 
+    /**
+     * A {@code Reporter} for method annotations.
+     */
     public interface MethodReporter extends Reporter {
 
         /**
          * This call back method is used to report an method level {@code Annotation}.
          * Only {@code Annotation}s, specified by {@link #annotations()} are reported!
          */
-        void reportMethodAnnotation(Class<? extends Annotation> annotation, String className, String methodName);
+        void reportMethodAnnotation(Class<? extends Annotation> annotation, String className,
+                                    String methodName);
 
     }
 
     // Only used during development. If set to "true" debug messages are displayed.
     private static final boolean DEBUG = false;
+    private final Logger logger = LoggerFactory.getLogger(AnnotationDetector.class);
 
     // Constant Pool type tags
     private static final int CP_UTF8 = 1;
@@ -248,33 +259,33 @@ public final class AnnotationDetector {
     /**
      * Report all Java ClassFile files available on the class path.
      *
-     * @see #detect(java.io.File...)
+     * @see #detect(File...)
      */
-    public final void detect() throws IOException {
+    public void detect() throws IOException {
         detect(new ClassFileIterator());
     }
 
     /**
-     * Report all Java ClassFile files available available on the class path from
+     * Report all Java ClassFile files available on the class path within
      * the specified packages and sub packages.
      *
-     * @see #detect(java.io.File...)
+     * @see #detect(File...)
      */
     public final void detect(final String... packageNames) throws IOException {
-        final ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        final String[] pkgNameFilter = new String[packageNames.length];
+        for (int i = 0; i < pkgNameFilter.length; ++i) {
+            pkgNameFilter[i] = packageNames[i].replace('.', '/');
+            if (!pkgNameFilter[i].endsWith("/")) {
+                pkgNameFilter[i] = pkgNameFilter[i].concat("/");
+            }
+
+        }
         final Set<File> files = new HashSet<File>();
-        for (final String packageName : packageNames) {
-            String internalPackageName = packageName.replace('.', '/');
-            if (!internalPackageName.endsWith("/")) {
-                internalPackageName = internalPackageName.concat("/");
-            }
+        final Set<InputStream> streams = new HashSet<InputStream>();
 
-            Enumeration<URL> resourceEnum = classLoader.getResources(internalPackageName);
-            /* weblogic workaround */
-            if (!resourceEnum.hasMoreElements()) {
-                resourceEnum = this.getClass().getClassLoader().getResources(internalPackageName);
-            }
-
+        for (final String packageName : pkgNameFilter) {
+            final ClassLoader loader = Thread.currentThread().getContextClassLoader();
+            final Enumeration<URL> resourceEnum = loader.getResources(packageName);
             while (resourceEnum.hasMoreElements()) {
                 final URL url = resourceEnum.nextElement();
                 // Handle JBoss VFS URL's which look like (example package 'nl.dvelop'):
@@ -294,15 +305,45 @@ public final class AnnotationDetector {
                         if (idx > -1) {
                             jarPath = jarPath.substring(0, idx + 4);
                             final File jarFile = new File(jarPath);
-                            if (jarFile.isFile()) {
+                            if (jarFile.isFile() && jarFile.exists()) {
                                 files.add(jarFile);
                                 if (DEBUG) print("Add jar file from VFS: '%s'", jarFile);
+                            } else {
+                                try {
+                                    List<org.jboss.vfs.VirtualFile> vfs = org.jboss.vfs.VFS.getChild(dir.getPath()).getChildren();
+                                    for (org.jboss.vfs.VirtualFile f : vfs) {
+                                        files.add(f.getPhysicalFile());
+                                    }
+                                } catch (Throwable ex) {
+                                    vfs(url, packageName, streams);
+                                }
                             }
+                        } else {
+                            vfs(url, packageName, streams);
                         }
                     }
                 } else {
                     // Resource in Jar File
-                    final File jarFile = toFile(((JarURLConnection) url.openConnection()).getJarFileURL());
+                    File jarFile;
+
+                    try {
+                        jarFile = toFile(((JarURLConnection) url.openConnection()).getJarFileURL());
+                    } catch (ClassCastException cce) {
+                        try {
+                            // Weblogic crap
+                            String u = url.toExternalForm();
+                            if (u.startsWith("zip:")) {
+                                u = u.substring(4);
+                                if (!u.startsWith("file:")) {
+                                    u = "file:" + u;
+                                }
+                                u = u.substring(0, u.indexOf("!"));
+                            }
+                            jarFile = toFile(new URL(u));
+                        } catch (Exception ex) {
+                            throw new AssertionError("Not a File: " + url.toExternalForm());
+                        }
+                    }
                     if (jarFile.isFile()) {
                         files.add(jarFile);
                         if (DEBUG) print("Add jar file: '%s'", jarFile);
@@ -312,21 +353,62 @@ public final class AnnotationDetector {
                 }
             }
         }
+
         if (!files.isEmpty()) {
-            detect(files.toArray(new File[files.size()]));
+            detect(new ClassFileIterator(files.toArray(new File[files.size()]), pkgNameFilter));
+        } else if (!streams.isEmpty()) {
+            detect(new ClassFileIterator(streams.toArray(new InputStream[streams.size()]), pkgNameFilter));
+        }
+    }
+
+    private void vfs(URL url, String packageName, Set<InputStream> streams) {
+//        org.jboss.virtual.VFS vfs = org.jboss.virtual.VFS.getVFS(url);
+//        org.jboss.virtual.VirtualFile root = vfs.getRoot();
+//        List<org.jboss.virtual.VirtualFile> children = root.getChildrenRecursively();
+//        ClassLoader c = Thread.currentThread().getContextClassLoader();
+//        for (org.jboss.virtual.VirtualFile f : children) {
+//            String clazz = f.getPathName();
+//            String classP = (packageName + clazz);
+//            if (clazz != null && clazz.endsWith(".class")) {
+//                streams.add(c.getResourceAsStream(classP));
+//            }
+//        }
+        ClassLoader c = Thread.currentThread().getContextClassLoader();
+
+        try {
+            Class<?> vfs = c.loadClass("org.jboss.virtual.VFS");
+            Method getVFS = vfs.getMethod("getVFS", new Class[]{URL.class});
+            Object vfsInstance = getVFS.invoke(null, url);
+            Method getRoot = vfs.getMethod("getRoot");
+
+            Object virtualFileInstance = getRoot.invoke(vfsInstance);
+            Method getChildrenRecursively = virtualFileInstance.getClass().getMethod("getChildrenRecursively");
+            List<Object> children = (List<Object>) getChildrenRecursively.invoke(virtualFileInstance);
+            Method getPathName = virtualFileInstance.getClass().getMethod("getPathName");
+            for (Object f : children) {
+                String clazz = (String) getPathName.invoke(f);
+                String classP = (packageName + clazz);
+                if (clazz != null && clazz.endsWith(".class")) {
+                    streams.add(c.getResourceAsStream(classP));
+                }
+            }
+        } catch (Throwable t) {
+            logger.warn("", t);
         }
     }
 
     /**
-     * Report all Java ClassFile files available available from the specified files
+     * Report all Java ClassFile files available from the specified files
      * and/or directories, including sub directories.
-     * <br/>
+     * <p/>
      * Note that non-class files (files, not starting with the magic number
      * {@code CAFEBABE} are silently ignored.
      */
-    public final void detect(final File... filesOrDirectories) throws IOException {
-        if (DEBUG) print("detectFilesOrDirectories: %s", (Object) filesOrDirectories);
-        detect(new ClassFileIterator(filesOrDirectories));
+    public void detect(final File... filesOrDirectories) throws IOException {
+        if (DEBUG) {
+            print("detectFilesOrDirectories: %s", (Object) filesOrDirectories);
+        }
+        detect(new ClassFileIterator(filesOrDirectories, null));
     }
 
     // private
@@ -345,7 +427,7 @@ public final class AnnotationDetector {
                 if (hasCafebabe(cpBuffer)) {
                     detect(cpBuffer);
                 } // else ignore
-            } catch (Throwable t) {
+            } catch (Throwable t) { // SUPPRESS CHECKSTYLE IllegalCatchCheck
                 // catch all errors
                 if (!iterator.isFile()) {
                     // in case of an error we close the ZIP File here
@@ -382,7 +464,8 @@ public final class AnnotationDetector {
     private void readVersion(final DataInput di) throws IOException {
         // sequence: minor version, major version (argument_index is 1-based)
         if (DEBUG) {
-            print("Java Class version %2$d.%1$d", di.readUnsignedShort(), di.readUnsignedShort());
+            print("Java Class version %2$d.%1$d",
+                    di.readUnsignedShort(), di.readUnsignedShort());
         } else {
             di.skipBytes(4);
         }
@@ -402,7 +485,9 @@ public final class AnnotationDetector {
     /**
      * Return true if a double slot is read (in case of Double or Long constant).
      */
-    private boolean readConstantPoolEntry(final DataInput di, final int index) throws IOException {
+    private boolean readConstantPoolEntry(final DataInput di, final int index)
+            throws IOException {
+
         final int tag = di.readUnsignedByte();
         switch (tag) {
             case CP_UTF8:
@@ -443,7 +528,9 @@ public final class AnnotationDetector {
 
     private void readThisClass(final DataInput di) throws IOException {
         typeName = resolveUtf8(di);
-        if (DEBUG) print("read type '%s'", typeName);
+        if (DEBUG) {
+            print("read type '%s'", typeName);
+        }
     }
 
     private void readSuperClass(final DataInput di) throws IOException {
@@ -457,33 +544,43 @@ public final class AnnotationDetector {
 
     private void readFields(final DataInput di) throws IOException {
         final int count = di.readUnsignedShort();
-        if (DEBUG) print("field count = %d", count);
+        if (DEBUG) {
+            print("field count = %d", count);
+        }
         for (int i = 0; i < count; ++i) {
             readAccessFlags(di);
             memberName = resolveUtf8(di);
             final String descriptor = resolveUtf8(di);
             readAttributes(di, 'F', fieldReporter == null);
-            if (DEBUG) print("Field: %s, descriptor: %s", memberName, descriptor);
+            if (DEBUG) {
+                print("Field: %s, descriptor: %s", memberName, descriptor);
+            }
         }
     }
 
     private void readMethods(final DataInput di) throws IOException {
         final int count = di.readUnsignedShort();
-        if (DEBUG) print("method count = %d", count);
+        if (DEBUG) {
+            print("method count = %d", count);
+        }
         for (int i = 0; i < count; ++i) {
             readAccessFlags(di);
             memberName = resolveUtf8(di);
             final String descriptor = resolveUtf8(di);
             readAttributes(di, 'M', methodReporter == null);
-            if (DEBUG) print("Method: %s, descriptor: %s", memberName, descriptor);
+            if (DEBUG) {
+                print("Method: %s, descriptor: %s", memberName, descriptor);
+            }
         }
     }
 
-    private void readAttributes(final DataInput di, final char reporterType, final boolean skipReporting)
-            throws IOException {
+    private void readAttributes(final DataInput di, final char reporterType,
+                                final boolean skipReporting) throws IOException {
 
         final int count = di.readUnsignedShort();
-        if (DEBUG) print("attribute count (%s) = %d", reporterType, count);
+        if (DEBUG) {
+            print("attribute count (%s) = %d", reporterType, count);
+        }
         for (int i = 0; i < count; ++i) {
             final String name = resolveUtf8(di);
             // in bytes, use this to skip the attribute info block
@@ -493,16 +590,22 @@ public final class AnnotationDetector {
                             "RuntimeInvisibleAnnotations".equals(name))) {
                 readAnnotations(di, reporterType);
             } else {
-                if (DEBUG) print("skip attribute %s", name);
+                if (DEBUG) {
+                    print("skip attribute %s", name);
+                }
                 di.skipBytes(length);
             }
         }
     }
 
-    private void readAnnotations(final DataInput di, final char reporterType) throws IOException {
+    private void readAnnotations(final DataInput di, final char reporterType)
+            throws IOException {
+
         // the number of Runtime(In)VisibleAnnotations
         final int count = di.readUnsignedShort();
-        if (DEBUG) print("annotation count (%s) = %d", reporterType, count);
+        if (DEBUG) {
+            print("annotation count (%s) = %d", reporterType, count);
+        }
         for (int i = 0; i < count; ++i) {
             final String rawTypeName = readAnnotation(di);
             final Class<? extends Annotation> type = annotations.get(rawTypeName);
@@ -530,7 +633,9 @@ public final class AnnotationDetector {
         final String rawTypeName = resolveUtf8(di);
         // num_element_value_pairs
         final int count = di.readUnsignedShort();
-        if (DEBUG) print("annotation elements count: %d", count);
+        if (DEBUG) {
+            print("annotation elements count: %d", count);
+        }
         for (int i = 0; i < count; ++i) {
             if (DEBUG) {
                 print("element '%s'", resolveUtf8(di));
@@ -544,7 +649,9 @@ public final class AnnotationDetector {
 
     private void readAnnotationElementValue(final DataInput di) throws IOException {
         final int tag = di.readUnsignedByte();
-        if (DEBUG) print("tag='%c'", (char) tag);
+        if (DEBUG) {
+            print("tag='%c'", (char) tag);
+        }
         switch (tag) {
             case BYTE:
             case CHAR:
@@ -573,7 +680,8 @@ public final class AnnotationDetector {
                 }
                 break;
             default:
-                throw new ClassFormatError("Not a valid annotation element type tag: 0x" + Integer.toHexString(tag));
+                throw new ClassFormatError("Not a valid annotation element type tag: 0x" +
+                        Integer.toHexString(tag));
         }
     }
 
@@ -587,10 +695,14 @@ public final class AnnotationDetector {
         final String s;
         if (value instanceof Integer) {
             s = (String) constantPool[(Integer) value];
-            if (DEBUG) print("resolveUtf8(%d): %d --> %s", index, value, s);
+            if (DEBUG) {
+                print("resolveUtf8(%d): %d --> %s", index, value, s);
+            }
         } else {
             s = (String) value;
-            if (DEBUG) print("resolveUtf8(%d): %s", index, s);
+            if (DEBUG) {
+                print("resolveUtf8(%d): %s", index, s);
+            }
         }
 
         return s;
@@ -619,7 +731,7 @@ public final class AnnotationDetector {
                 }
                 logMessage = String.format(message, args);
             }
-            System.out.println(logMessage);
+            System.out.println(logMessage); // SUPPRESS CHECKSTYLE RegexpSinglelineJavaCheck
         }
     }
 

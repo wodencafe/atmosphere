@@ -13,17 +13,15 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package org.atmosphere;
-
-import org.atmosphere.cpr.AtmosphereResource;
-import org.atmosphere.cpr.PerRequestBroadcastFilter;
+package org.atmosphere.cpr;
 
 /**
- * Adapter for {@link PerRequestBroadcastFilter}. Both method return {@link BroadcastAction.ACTION#CONTINUE} with the message.
+ * Adapter for {@link PerRequestBroadcastFilter}. Both methods return {@link BroadcastAction.ACTION#CONTINUE} with the message.
  *
- * @author Jean-francois Arcand
+ * @author Jeanfrancois Arcand
  */
 public class BroadcastFilterAdapter implements PerRequestBroadcastFilter {
+
     @Override
     public BroadcastAction filter(AtmosphereResource r, Object originalMessage, Object message) {
         return new BroadcastAction(message);

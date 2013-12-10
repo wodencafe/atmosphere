@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.atmosphere.annotation.AnnotationUtil.atmosphereConfig;
+import static org.atmosphere.annotation.AnnotationUtil.broadcaster;
 import static org.atmosphere.annotation.AnnotationUtil.filters;
 import static org.atmosphere.annotation.AnnotationUtil.listeners;
 
@@ -45,7 +46,6 @@ public class ManagedServiceProcessor implements Processor {
             List<AtmosphereInterceptor> l = new ArrayList<AtmosphereInterceptor>();
 
             atmosphereConfig(a.atmosphereConfig(), framework);
-            framework.setDefaultBroadcasterClassName(a.broadcaster().getName());
             filters(a.broadcastFilters(), framework);
 
             AtmosphereInterceptor aa = listeners(a.listeners(), framework);
@@ -53,20 +53,20 @@ public class ManagedServiceProcessor implements Processor {
                 l.add(aa);
             }
 
-            Object c = aClass.newInstance();
-            AtmosphereHandler handler = new ManagedAtmosphereHandler(c);
+            Object c = framework.newClassInstance(aClass);
+            AtmosphereHandler handler = framework.newClassInstance(ManagedAtmosphereHandler.class).configure(framework.getAtmosphereConfig(), c);
             // MUST BE ADDED FIRST, ALWAYS!
-            l.add(new ManagedServiceInterceptor(ManagedAtmosphereHandler.class.cast(handler)));
+            l.add(framework.newClassInstance(ManagedServiceInterceptor.class));
 
             Class<?>[] interceptors = a.interceptors();
             for (Class i : interceptors) {
                 try {
-                    l.add((AtmosphereInterceptor) i.newInstance());
+                    l.add((AtmosphereInterceptor) framework.newClassInstance(i));
                 } catch (Throwable e) {
                     logger.warn("", e);
                 }
             }
-            framework.addAtmosphereHandler(a.path(), handler, l);
+            framework.addAtmosphereHandler(a.path(), handler, broadcaster(framework, a.broadcaster(), a.path()), l);
         } catch (Throwable e) {
             logger.warn("", e);
         }

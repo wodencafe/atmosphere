@@ -25,7 +25,10 @@ import org.testng.annotations.Test;
 import javax.servlet.ServletException;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.mockito.Mockito.mock;
@@ -65,6 +68,7 @@ public class AtmosphereResourceStateRecoveryTest {
 
     @Test
     public void removeAtmosphereResourceTest() throws ServletException, IOException {
+        recovery.states().clear();
         recovery.configure(config);
         recovery.inspect(r);
         r.suspend();
@@ -82,8 +86,26 @@ public class AtmosphereResourceStateRecoveryTest {
         assertEquals(recovery.states().size(), 1);
     }
 
+    @Test
+    public void timeoutTest() throws ServletException, IOException, InterruptedException {
+        recovery.configure(config);
+        recovery.inspect(r);
+        final AtomicBoolean resumed = new AtomicBoolean();
+        final CountDownLatch latch = new CountDownLatch(1);
+        r.addEventListener(new AtmosphereResourceEventListenerAdapter(){
+            @Override
+            public void onResume(AtmosphereResourceEvent event) {
+                resumed.set(true);
+            }
+        }).suspend();
+        latch.await(2, TimeUnit.SECONDS);
+        r.resume();
+        assertTrue(resumed.get());
+        assertEquals(recovery.states().size(), 1);
+    }
+
     // This test is no longer working since isClosedByClient changes the behavior.
-    @Test (enabled = false)
+    @Test(enabled = false)
     public void restoreStateTest() throws ServletException, IOException {
         recovery.configure(config);
         recovery.inspect(r);
@@ -125,7 +147,7 @@ public class AtmosphereResourceStateRecoveryTest {
 
     }
 
-    @Test (enabled = false)
+    @Test(enabled = false)
     public void longPollingAggregatedTest() throws ServletException, IOException, ExecutionException, InterruptedException {
         final AtomicReference<Object> ref = new AtomicReference<Object>();
         AtmosphereResourceImpl r = (AtmosphereResourceImpl) AtmosphereResourceFactory.getDefault().create(config, "1234567");

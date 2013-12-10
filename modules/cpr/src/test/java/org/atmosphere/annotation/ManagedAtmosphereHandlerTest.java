@@ -33,6 +33,7 @@ import org.atmosphere.cpr.AtmosphereResourceEventListenerAdapter;
 import org.atmosphere.cpr.AtmosphereResourceImpl;
 import org.atmosphere.cpr.AtmosphereResponse;
 import org.atmosphere.interceptor.InvokationOrder;
+import org.atmosphere.util.ExcludeSessionBroadcaster;
 import org.atmosphere.util.SimpleBroadcaster;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
@@ -41,7 +42,11 @@ import org.testng.annotations.Test;
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.util.Enumeration;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -58,7 +63,7 @@ public class ManagedAtmosphereHandlerTest {
     @BeforeMethod
     public void create() throws Throwable {
         framework = new AtmosphereFramework();
-        framework.setDefaultBroadcasterClassName(SimpleBroadcaster.class.getName()) ;
+        framework.setDefaultBroadcasterClassName(SimpleBroadcaster.class.getName());
         framework.addAnnotationPackage(ManagedGet.class);
         framework.setAsyncSupport(new AsynchronousProcessor(framework.getAtmosphereConfig()) {
 
@@ -223,23 +228,23 @@ public class ManagedAtmosphereHandlerTest {
     @ManagedService(path = "/k")
     public final static class ManagedMessageWithResource {
 
-      @Get
-      public void get(AtmosphereResource resource) {
-          r.set(resource);
-          resource.addEventListener(new AtmosphereResourceEventListenerAdapter() {
-              @Override
-              public void onSuspend(AtmosphereResourceEvent event) {
-                  AtmosphereRequest request = new AtmosphereRequest.Builder().pathInfo("/k").method("POST").body("message").build();
+        @Get
+        public void get(AtmosphereResource resource) {
+            r.set(resource);
+            resource.addEventListener(new AtmosphereResourceEventListenerAdapter() {
+                @Override
+                public void onSuspend(AtmosphereResourceEvent event) {
+                    AtmosphereRequest request = new AtmosphereRequest.Builder().pathInfo("/k").method("POST").body("message").build();
 
-                  try {
-                      event.getResource().getAtmosphereConfig().framework().doCometSupport(request, AtmosphereResponse.newInstance());
-                  } catch (IOException e) {
-                      e.printStackTrace();
-                  } catch (ServletException e) {
-                      e.printStackTrace();
-                  }
-              }
-          }).suspend();
+                    try {
+                        event.getResource().getAtmosphereConfig().framework().doCometSupport(request, AtmosphereResponse.newInstance());
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    } catch (ServletException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }).suspend();
 
         }
 
@@ -283,13 +288,13 @@ public class ManagedAtmosphereHandlerTest {
     }
 
     public final static class I extends AtmosphereInterceptorAdapter {
-       @Override
-       public PRIORITY priority() {
-           return InvokationOrder.FIRST_BEFORE_DEFAULT;
-       }
+        @Override
+        public PRIORITY priority() {
+            return InvokationOrder.FIRST_BEFORE_DEFAULT;
+        }
 
         @Override
-        public String toString(){
+        public String toString() {
             return "XXX";
         }
     }
@@ -316,5 +321,119 @@ public class ManagedAtmosphereHandlerTest {
         assertEquals(framework.interceptors().getFirst().toString(), "XXX");
 
         assertNotNull(r.get());
+    }
+
+    @ManagedService(path = "/override", broadcaster = ExcludeSessionBroadcaster.class)
+    public final static class OverrideBroadcaster {
+        @Get
+        public void get(AtmosphereResource resource) {
+            // Normally we don't need that, this will be done using an Interceptor.
+            resource.suspend();
+        }
+
+        @Ready
+        public void suspend(AtmosphereResource resource) {
+            r.set(resource);
+        }
+    }
+
+    @Test
+    public void testOverrideBroadcaster() throws IOException, ServletException {
+        framework.setDefaultBroadcasterClassName(SimpleBroadcaster.class.getName());
+
+        AtmosphereRequest request = new AtmosphereRequest.Builder().pathInfo("/override").method("GET").build();
+        framework.doCometSupport(request, AtmosphereResponse.newInstance());
+
+        assertNotNull(r.get());
+        assertEquals(r.get().getBroadcaster().getClass().getName(), SimpleBroadcaster.class.getName());
+
+    }
+
+    @ManagedService(path = "/readerInjection")
+    public final static class ReaderInjection {
+        @Get
+        public void get(AtmosphereResource resource) {
+            r.set(resource);
+            resource.addEventListener(new AtmosphereResourceEventListenerAdapter() {
+                @Override
+                public void onSuspend(AtmosphereResourceEvent event) {
+                    AtmosphereRequest request = new AtmosphereRequest.Builder().pathInfo("/readerInjection").method("POST").body("message").build();
+
+                    try {
+                        event.getResource().getAtmosphereConfig().framework().doCometSupport(request, AtmosphereResponse.newInstance());
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    } catch (ServletException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }).suspend();
+
+        }
+
+        @Message
+        public void message(Reader reader) {
+            try {
+                message.set(new BufferedReader(reader).readLine());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    @Test
+    public void testReaderMessage() throws IOException, ServletException {
+
+        AtmosphereRequest request = new AtmosphereRequest.Builder().pathInfo("/readerInjection").method("GET").build();
+        framework.doCometSupport(request, AtmosphereResponse.newInstance());
+        assertNotNull(r.get());
+        r.get().resume();
+        assertNotNull(message.get());
+        assertEquals(message.get(), "message");
+
+    }
+
+    @ManagedService(path = "/inputStreamInjection")
+    public final static class InputStreamInjection {
+        @Get
+        public void get(AtmosphereResource resource) {
+            r.set(resource);
+            resource.addEventListener(new AtmosphereResourceEventListenerAdapter() {
+                @Override
+                public void onSuspend(AtmosphereResourceEvent event) {
+                    AtmosphereRequest request = new AtmosphereRequest.Builder().pathInfo("/inputStreamInjection").method("POST").body("message").build();
+
+                    try {
+                        event.getResource().getAtmosphereConfig().framework().doCometSupport(request, AtmosphereResponse.newInstance());
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    } catch (ServletException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }).suspend();
+
+        }
+
+        @Message
+        public void message(InputStream reader) {
+            try {
+                message.set(new BufferedReader(new InputStreamReader(reader)).readLine());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    @Test
+    public void testInputStreamMessage() throws IOException, ServletException {
+
+        AtmosphereRequest request = new AtmosphereRequest.Builder().pathInfo("/inputStreamInjection").method("GET").build();
+        framework.doCometSupport(request, AtmosphereResponse.newInstance());
+        assertNotNull(r.get());
+        r.get().resume();
+        assertNotNull(message.get());
+        assertEquals(message.get(), "message");
+
     }
 }

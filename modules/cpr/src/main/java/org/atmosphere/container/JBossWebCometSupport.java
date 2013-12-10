@@ -57,6 +57,7 @@ import org.atmosphere.cpr.ApplicationConfig;
 import org.atmosphere.cpr.AsynchronousProcessor;
 import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereRequest;
+import org.atmosphere.cpr.AtmosphereResource;
 import org.atmosphere.cpr.AtmosphereResourceImpl;
 import org.atmosphere.cpr.AtmosphereResponse;
 import org.jboss.servlet.http.HttpEvent;
@@ -108,12 +109,14 @@ public class JBossWebCometSupport extends AsynchronousProcessor {
 
         // Comet is not enabled.
         if (event == null) {
+            logger.error("HttpEvent is null, JBoss APR Not Properly installed");
             throw unableToDetectComet;
         }
 
         logger.trace("Event Type {} for {}", event.getType(), req.getQueryString());
         Action action = null;
         // For now, we are just interested in HttpEvent.REA
+        AtmosphereResource r = req.resource();
         if (event.getType() == HttpEvent.EventType.BEGIN) {
             action = suspended(req, res);
             if (action.type() == Action.TYPE.SUSPEND) {
@@ -140,7 +143,10 @@ public class JBossWebCometSupport extends AsynchronousProcessor {
         } else if (event.getType() == HttpEvent.EventType.EOF
                 || event.getType() == HttpEvent.EventType.ERROR
                 || event.getType() == HttpEvent.EventType.END) {
-            if (req.getAttribute(SUSPENDED) != null && closeConnectionOnInputStream) {
+
+            if (r != null && r.isResumed()) {
+                AtmosphereResourceImpl.class.cast(req.resource()).cancel();
+            } else if (req.getAttribute(SUSPENDED) != null && closeConnectionOnInputStream) {
                 req.setAttribute(SUSPENDED, null);
                 action = cancelled(req, res);
             } else {
@@ -167,9 +173,6 @@ public class JBossWebCometSupport extends AsynchronousProcessor {
         return action;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void action(AtmosphereResourceImpl actionEvent) {
         super.action(actionEvent);

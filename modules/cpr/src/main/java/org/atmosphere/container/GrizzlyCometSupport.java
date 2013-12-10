@@ -91,8 +91,7 @@ public class GrizzlyCometSupport extends AsynchronousProcessor {
     }
 
     /**
-     * Init Grizzly's {@link CometContext} that will be used to suspend and
-     * resume the response.
+     * Init Grizzly's {@link CometContext} that will be used to suspend and resume the response.
      *
      * @param sc the {@link ServletContext}
      * @throws javax.servlet.ServletException
@@ -109,9 +108,7 @@ public class GrizzlyCometSupport extends AsynchronousProcessor {
         logger.debug("Created CometContext for atmosphere context: {}", atmosphereCtx);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public Action service(AtmosphereRequest req, AtmosphereResponse res)
             throws IOException, ServletException {
 
@@ -148,7 +145,7 @@ public class GrizzlyCometSupport extends AsynchronousProcessor {
     }
 
     /**
-     * Resume the underlying response,
+     * Resume the underlying response.
      *
      * @param req an {@link AtmosphereRequest}
      * @param ctx a {@link CometContext}
@@ -167,10 +164,12 @@ public class GrizzlyCometSupport extends AsynchronousProcessor {
             req.getSession().removeAttribute(ATMOSPHERE);
         }
 
-        try {
-            AtmosphereResourceImpl.class.cast(req.resource()).cancel();
-        } catch (IOException e) {
-            logger.trace("", e);
+        if (req.resource() != null) {
+            try {
+                AtmosphereResourceImpl.class.cast(req.resource()).cancel();
+            } catch (IOException e) {
+                logger.trace("", e);
+            }
         }
 
         if (handler != null && (config.getInitParameter(ApplicationConfig.RESUME_AND_KEEPALIVE) == null
@@ -179,9 +178,6 @@ public class GrizzlyCometSupport extends AsynchronousProcessor {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void action(AtmosphereResourceImpl r) {
         super.action(r);
@@ -216,33 +212,23 @@ public class GrizzlyCometSupport extends AsynchronousProcessor {
             this.res = res;
         }
 
-        /**
-         * {@inheritDoc}
-         */
+        @Override
         public void attach(Object o) {
         }
 
-        /**
-         * {@inheritDoc}
-         */
+        @Override
         public void onEvent(CometEvent ce) throws IOException {
         }
 
-        /**
-         * {@inheritDoc}
-         */
+        @Override
         public void onInitialize(CometEvent ce) throws IOException {
         }
 
-        /**
-         * {@inheritDoc}
-         */
+        @Override
         public void onTerminate(CometEvent ce) throws IOException {
         }
 
-        /**
-         * {@inheritDoc}
-         */
+        @Override
         public synchronized void onInterrupt(CometEvent ce) throws IOException {
             long timeStamp = (Long) ce.getCometContext().getAttribute("Time");
             try {

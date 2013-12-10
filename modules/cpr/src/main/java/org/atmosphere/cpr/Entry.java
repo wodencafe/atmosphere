@@ -32,60 +32,49 @@ public class Entry {
     public final TYPE type;
     // https://github.com/Atmosphere/atmosphere/issues/864
     public CacheMessage cache;
+    public boolean async;
 
-    public Entry(Object message, AtmosphereResource r, BroadcasterFuture<?> future, Object originalMessage) {
-        this.message = message;
-        this.future = future;
-        this.writeLocally = true;
-        this.originalMessage = originalMessage;
+    public Entry(TYPE type,
+                 Object originalMessage,
+                 Object message,
+                 AtmosphereResource r,
+                 BroadcasterFuture<?> future,
+                 CacheMessage cache,
+                 boolean writeLocally,
+                 Set<AtmosphereResource> resources,
+                 boolean async) {
 
-        this.type = TYPE.RESOURCE;
-        this.resource = r;
-        this.resources = null;
-    }
-
-    public Entry(Object message, BroadcasterFuture<?> future, Object originalMessage) {
-        this.message = message;
-        this.future = future;
-        this.writeLocally = true;
-        this.originalMessage = originalMessage;
-
-        this.type = TYPE.ALL;
-        this.resource = null;
-        this.resources = null;
-    }
-
-    public Entry(AtmosphereResource r, Entry e) {
-        this.message = e.message;
-        this.future = e.future;
-        this.writeLocally = true;
-        this.originalMessage = e.originalMessage;
-
-        this.type = TYPE.RESOURCE;
-        this.resource = r;
-        this.resources = null;
-    }
-
-    public Entry(Object message, Set<AtmosphereResource> resources, BroadcasterFuture<?> future, Object originalMessage) {
-        this.message = message;
-        this.future = future;
-        this.writeLocally = true;
-        this.originalMessage = message;
-
-        this.type = TYPE.SET;
-        this.resources = resources;
-        this.resource = null;
-    }
-
-    public Entry(Object message, BroadcasterFuture<?> future, boolean writeLocally) {
         this.message = message;
         this.future = future;
         this.writeLocally = writeLocally;
-        this.originalMessage = message;
+        this.originalMessage = originalMessage;
 
-        this.type = TYPE.ALL;
-        this.resources = null;
-        this.resource = null;
+        this.type = type;
+        this.resource = r;
+        this.cache = cache;
+        this.resources = resources;
+        this.async = async;
+    }
+
+
+    public Entry(Object message, AtmosphereResource r, BroadcasterFuture<?> future, Object originalMessage) {
+        this(TYPE.RESOURCE, originalMessage, message, r, future, null, true, null, true);
+    }
+
+    public Entry(Object message, BroadcasterFuture<?> future, Object originalMessage) {
+        this(TYPE.ALL, originalMessage, message, null, future, null, true, null, true);
+    }
+
+    public Entry(AtmosphereResource r, Entry e) {
+        this(TYPE.RESOURCE, e.originalMessage, e.message, r, e.future, e.cache, e.writeLocally, null, e.async);
+    }
+
+    public Entry(Object message, Set<AtmosphereResource> resources, BroadcasterFuture<?> future, Object originalMessage) {
+        this(TYPE.SET, originalMessage, message, null, future, null, true, resources, true);
+    }
+
+    public Entry(Object message, BroadcasterFuture<?> future, boolean writeLocally) {
+        this(TYPE.ALL, message, message, null, future, null, writeLocally, null, true);
     }
 
     @Override

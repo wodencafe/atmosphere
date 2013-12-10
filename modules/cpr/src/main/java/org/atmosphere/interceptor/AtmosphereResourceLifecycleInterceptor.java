@@ -26,8 +26,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 import static org.atmosphere.cpr.ApplicationConfig.ATMOSPHERERESOURCE_INTERCEPTOR_METHOD;
+import static org.atmosphere.cpr.ApplicationConfig.ATMOSPHERERESOURCE_INTERCEPTOR_TIMEOUT;
 
 /**
  * <p>This {@link AtmosphereInterceptor} implementation automatically suspends the intercepted
@@ -58,13 +60,28 @@ import static org.atmosphere.cpr.ApplicationConfig.ATMOSPHERERESOURCE_INTERCEPTO
 public class AtmosphereResourceLifecycleInterceptor implements AtmosphereInterceptor {
 
     private String method = "GET";
+    private Integer timeoutInSeconds = -1;
     private static final Logger logger = LoggerFactory.getLogger(AtmosphereResourceLifecycleInterceptor.class);
+    private final boolean force;
+
+    public AtmosphereResourceLifecycleInterceptor(){
+        this(false);
+    }
+
+    public AtmosphereResourceLifecycleInterceptor(boolean force){
+        this.force = force;
+    }
 
     @Override
     public void configure(AtmosphereConfig config) {
         String s = config.getInitParameter(ATMOSPHERERESOURCE_INTERCEPTOR_METHOD);
         if (s != null) {
             method = s;
+        }
+
+        s = config.getInitParameter(ATMOSPHERERESOURCE_INTERCEPTOR_TIMEOUT);
+        if (s != null) {
+            timeoutInSeconds = Integer.valueOf(s);
         }
     }
 
@@ -93,8 +110,11 @@ public class AtmosphereResourceLifecycleInterceptor implements AtmosphereInterce
 
         if (r.transport().equals(AtmosphereResource.TRANSPORT.UNDEFINED)) return;
 
-        if (!AtmosphereResourceImpl.class.cast(r).action().equals(Action.CANCELLED)
-                && r.getRequest().getMethod().equalsIgnoreCase(method)) {
+        AtmosphereResourceImpl impl = AtmosphereResourceImpl.class.cast(r);
+        if ( (force || impl.getRequest(false).getMethod().equalsIgnoreCase(method))
+            && !impl.action().equals(Action.CANCELLED)
+            && impl.isInScope()) {
+
             logger.trace("Marking AtmosphereResource {} for suspend operation", r.uuid());
             r.addEventListener(new AtmosphereResourceEventListenerAdapter() {
                 @Override
@@ -113,7 +133,7 @@ public class AtmosphereResourceLifecycleInterceptor implements AtmosphereInterce
                             break;
                     }
                 }
-            }).suspend();
+            }).suspend(timeoutInSeconds == -1 ? timeoutInSeconds : TimeUnit.MILLISECONDS.convert(timeoutInSeconds, TimeUnit.SECONDS));
         }
     }
 

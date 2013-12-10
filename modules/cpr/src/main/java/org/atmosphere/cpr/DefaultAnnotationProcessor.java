@@ -15,8 +15,24 @@
  */
 package org.atmosphere.cpr;
 
-import org.atmosphere.annotation.Processor;
 import org.atmosphere.config.AtmosphereAnnotation;
+import org.atmosphere.config.service.AsyncSupportListenerService;
+import org.atmosphere.config.service.AsyncSupportService;
+import org.atmosphere.config.service.AtmosphereHandlerService;
+import org.atmosphere.config.service.AtmosphereInterceptorService;
+import org.atmosphere.config.service.AtmosphereService;
+import org.atmosphere.config.service.BroadcasterCacheInspectorService;
+import org.atmosphere.config.service.BroadcasterCacheService;
+import org.atmosphere.config.service.BroadcasterFactoryService;
+import org.atmosphere.config.service.BroadcasterFilterService;
+import org.atmosphere.config.service.BroadcasterListenerService;
+import org.atmosphere.config.service.BroadcasterService;
+import org.atmosphere.config.service.EndpointMapperService;
+import org.atmosphere.config.service.ManagedService;
+import org.atmosphere.config.service.MeteorService;
+import org.atmosphere.config.service.WebSocketHandlerService;
+import org.atmosphere.config.service.WebSocketProcessorService;
+import org.atmosphere.config.service.WebSocketProtocolService;
 import org.atmosphere.util.annotation.AnnotationDetector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,10 +45,11 @@ import java.lang.annotation.Annotation;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * An {@link AnnotationProcessor} that selects between a ServletContextInitializer based scanner, and
- * a bytecode based scanner based on <a href="https://github.com/rmuller/infomas-asl"></a>
+ * a bytecode based scanner based on <a href="https://github.com/rmuller/infomas-asl"></a>.
  * <p/>
  *
  * @author Jeanfrancois Arcand
@@ -42,12 +59,35 @@ public class DefaultAnnotationProcessor implements AnnotationProcessor {
     private static final Logger logger = LoggerFactory.getLogger(DefaultAnnotationProcessor.class);
 
     /**
-     * The attribute name under which the annotations are stored in the servlet context
+     * The attribute name under which the annotations are stored in the servlet context.
      */
     public static final String ANNOTATION_ATTRIBUTE = "org.atmosphere.cpr.ANNOTATION_MAP";
 
+    // Annotation in java is broken.
+    private static final Class[] coreAnnotations = {
+            AtmosphereHandlerService.class,
+            BroadcasterCacheService.class,
+            BroadcasterFilterService.class,
+            BroadcasterFactoryService.class,
+            BroadcasterService.class,
+            MeteorService.class,
+            WebSocketHandlerService.class,
+            WebSocketProtocolService.class,
+            AtmosphereInterceptorService.class,
+            BroadcasterListenerService.class,
+            AsyncSupportService.class,
+            AsyncSupportListenerService.class,
+            WebSocketProcessorService.class,
+            BroadcasterCacheInspectorService.class,
+            ManagedService.class,
+            AtmosphereService.class,
+            EndpointMapperService.class,
+            AtmosphereAnnotation.class
+    };
+
     private AnnotationProcessor delegate;
     private final AnnotationHandler handler;
+    private final AtomicBoolean coreAnnotationsFound = new AtomicBoolean();
 
     private final AnnotationDetector.TypeReporter atmosphereReporter = new AnnotationDetector.TypeReporter() {
         @SuppressWarnings("unchecked")
@@ -61,6 +101,7 @@ public class DefaultAnnotationProcessor implements AnnotationProcessor {
         @Override
         public void reportTypeAnnotation(Class<? extends Annotation> annotation, String className) {
             try {
+                coreAnnotationsFound.set(true);
                 handler.handleProcessor(loadClass(getClass(), className));
             } catch (Exception e) {
                 logger.warn("Error scanning @AtmosphereAnnotation", e);
@@ -108,14 +149,32 @@ public class DefaultAnnotationProcessor implements AnnotationProcessor {
             }
 
             // Now look for application defined annotation
-            String path = f.getHandlersPath();
+            String path = f.getServletContext().getRealPath(f.getHandlersPath());
             if (path != null) {
                 detector.detect(new File(path));
+            }
+
+            // JBoss|vfs with APR issue, or any strange containers may fail. This is a hack for them.
+            // https://github.com/Atmosphere/atmosphere/issues/1292
+            if (!coreAnnotationsFound.get()) {
+                fallbackToManualAnnotatedClasses(getClass(), f, handler);
             }
         } catch (IOException e) {
             logger.warn("Unable to scan annotation", e);
         } finally {
             detector.destroy();
+        }
+    }
+
+    private static void fallbackToManualAnnotatedClasses(Class<?> mainClass, AtmosphereFramework f, AnnotationHandler handler) {
+        logger.warn("Unable to detect annotations. Application may fail to deploy.");
+        f.annotationScanned(true);
+        for (Class a : coreAnnotations) {
+            try {
+                handler.handleProcessor(loadClass(mainClass, a.getName()));
+            } catch (Exception e) {
+                logger.trace("", e);
+            }
         }
     }
 
@@ -160,7 +219,6 @@ public class DefaultAnnotationProcessor implements AnnotationProcessor {
          */
         private boolean alreadyScanned = false;
 
-
         private ServletContainerInitializerAnnotationProcessor(AnnotationHandler handler,
                                                                final Map<Class<? extends Annotation>, Set<Class<?>>> annotations,
                                                                final AtmosphereFramework framework) {
@@ -201,15 +259,16 @@ public class DefaultAnnotationProcessor implements AnnotationProcessor {
             if (atmosphereAnnotatedClasses != null) {
                 for (Class<?> clazz : atmosphereAnnotatedClasses) {
                     handler.handleProcessor(clazz);
-
-                    // If larger, a custom annotation has been defined.
-                    if (atmosphereAnnotatedClasses.size() > AnnotationScanningServletContainerInitializer.class.getAnnotation(HandlesTypes.class).value().length) {
-                        scanForCustomizedAnnotation = true;
-                    }
                 }
                 annotations.remove(AtmosphereAnnotation.class);
             } else {
-                logger.error("No @AtmosphereService annotation found. Annotation won't work.");
+                fallbackToManualAnnotatedClasses(getClass(),framework, handler);
+            }
+
+            // If larger, a custom annotation has been defined.
+            if (atmosphereAnnotatedClasses != null && atmosphereAnnotatedClasses.size() >=
+                    AnnotationScanningServletContainerInitializer.class.getAnnotation(HandlesTypes.class).value().length) {
+                scanForCustomizedAnnotation = true;
             }
             return scanForCustomizedAnnotation;
         }
@@ -217,12 +276,8 @@ public class DefaultAnnotationProcessor implements AnnotationProcessor {
         private void scanForCustomAnnotation(Set<Class<?>> atmosphereAnnotatedClasses) throws IOException {
             BytecodeBasedAnnotationProcessor b = new BytecodeBasedAnnotationProcessor(handler);
             b.configure(framework);
-            for (Class<?> clazz : atmosphereAnnotatedClasses) {
-                if (clazz.getPackage().getName().startsWith(Processor.class.getName())) {
-                    b.scan(clazz.getPackage().getName());
-                }
-            }
-            b.destroy();
+            String path = framework.getServletContext().getRealPath(framework.getHandlersPath());
+            b.scan(new File(path)).destroy();
         }
 
         @Override
@@ -312,7 +367,7 @@ public class DefaultAnnotationProcessor implements AnnotationProcessor {
 
         @Override
         public void destroy() {
-            detector.destroy();
+            if (detector != null) detector.destroy();
         }
     }
 

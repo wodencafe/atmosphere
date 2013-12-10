@@ -30,8 +30,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Handle {@link org.atmosphere.config.service.Singleton},{@link org.atmosphere.config.service.MeteorService} and {@link org.atmosphere.config.service.AtmosphereHandlerService}
- * processing.
+ * Handle {@link org.atmosphere.config.service.Singleton},{@link org.atmosphere.config.service.MeteorService} and
+ * {@link org.atmosphere.config.service.AtmosphereHandlerService} processing.
  *
  * @author Jeanfrancois Arcand
  */
@@ -91,13 +91,16 @@ public class AtmosphereHandlerServiceInterceptor extends AtmosphereInterceptorAd
         synchronized (config.handlers()) {
             if (config.handlers().get(path) == null) {
                 // AtmosphereHandlerService
-                if (w.atmosphereHandler.getClass().getAnnotation(AtmosphereHandlerService.class) != null) {
+                AtmosphereHandlerService m = w.atmosphereHandler.getClass().getAnnotation(AtmosphereHandlerService.class);
+                if (m != null) {
                     try {
                         boolean singleton = w.atmosphereHandler.getClass().getAnnotation(Singleton.class) != null;
                         if (!singleton) {
-                            config.framework().addAtmosphereHandler(path, w.atmosphereHandler.getClass().newInstance(), w.interceptors);
+                            config.framework().addAtmosphereHandler(path, config.framework().newClassInstance(w.atmosphereHandler.getClass()),
+                                    config.getBroadcasterFactory().lookup(m.broadcaster(), path, true), w.interceptors);
                         } else {
-                            config.framework().addAtmosphereHandler(path, w.atmosphereHandler, w.interceptors);
+                            config.framework().addAtmosphereHandler(path, w.atmosphereHandler,
+                                    config.getBroadcasterFactory().lookup(m.broadcaster(), path, true), w.interceptors);
                         }
                         request.setAttribute(FrameworkConfig.NEW_MAPPING, "true");
                     } catch (Throwable e) {

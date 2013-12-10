@@ -47,10 +47,11 @@ public abstract class WebSocket extends AtmosphereInterceptorWriter {
     public final static String WEBSOCKET_RESUME = WebSocket.class.getName() + ".resume";
     public final static String WEBSOCKET_ACCEPT_DONE = WebSocket.class.getName() + ".acceptDone";
     public final static String NOT_SUPPORTED = "Websocket protocol not supported";
+    public final static String CLEAN_CLOSE = "Clean_Close";
 
     private AtmosphereResource r;
     protected long lastWrite = 0;
-    protected final boolean binaryWrite;
+    protected boolean binaryWrite;
     private final ByteArrayAsyncWriter buffer = new ByteArrayAsyncWriter();
     private final AtomicBoolean firstWrite = new AtomicBoolean(false);
     private final AtmosphereConfig config;
@@ -77,6 +78,15 @@ public abstract class WebSocket extends AtmosphereInterceptorWriter {
         return this;
     }
 
+    /**
+     * Switch to binary write, or go back to text write. Default is false.
+     * @param binaryWrite true to switch to binary write.
+     * @return
+     */
+    public WebSocket binaryWrite(boolean binaryWrite) {
+        this.binaryWrite = binaryWrite;
+        return this;
+    }
 
     protected WebSocketHandler webSocketHandler() {
         return webSocketHandler;
@@ -131,9 +141,6 @@ public abstract class WebSocket extends AtmosphereInterceptorWriter {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public WebSocket write(AtmosphereResponse r, String data) throws IOException {
         firstWrite.set(true);
@@ -169,9 +176,6 @@ public abstract class WebSocket extends AtmosphereInterceptorWriter {
         return this;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public WebSocket write(AtmosphereResponse r, byte[] data) throws IOException {
         if (data == null) {
@@ -181,9 +185,6 @@ public abstract class WebSocket extends AtmosphereInterceptorWriter {
         return write(r, data, 0, data.length);
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public WebSocket write(AtmosphereResponse r, byte[] b, int offset, int length) throws IOException {
         firstWrite.set(true);
@@ -195,7 +196,7 @@ public abstract class WebSocket extends AtmosphereInterceptorWriter {
 
         logger.trace("WebSocket.write()");
         boolean transform = filters.size() > 0 && r.getStatus() < 400;
-        if (binaryWrite) {
+        if (binaryWrite || r.resource().forceBinaryWrite()) {
             if (transform) {
                 b = transform(b, offset, length);
             }
@@ -236,9 +237,6 @@ public abstract class WebSocket extends AtmosphereInterceptorWriter {
         return this;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public WebSocket writeError(AtmosphereResponse r, int errorCode, String message) throws IOException {
         super.writeError(r, errorCode, message);
@@ -252,9 +250,6 @@ public abstract class WebSocket extends AtmosphereInterceptorWriter {
         return this;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public WebSocket redirect(AtmosphereResponse r, String location) throws IOException {
         logger.error("WebSocket Redirect not supported");
@@ -262,13 +257,12 @@ public abstract class WebSocket extends AtmosphereInterceptorWriter {
     }
 
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void close(AtmosphereResponse r) throws IOException {
         logger.trace("WebSocket.close()");
-        close();
+        if (r.request() != null && r.request().getAttribute(CLEAN_CLOSE) == null) {
+            close();
+        }
         try {
             bb.clear();
             cb.clear();
@@ -278,9 +272,6 @@ public abstract class WebSocket extends AtmosphereInterceptorWriter {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public WebSocket flush(AtmosphereResponse r) throws IOException {
         return this;
@@ -289,14 +280,33 @@ public abstract class WebSocket extends AtmosphereInterceptorWriter {
     /**
      * Is the underlying WebSocket open.
      *
-     * @return
+     * @return true is opened
      */
     abstract public boolean isOpen();
 
+    /**
+     * Use the underlying container's websocket to write the String.
+     *
+     * @param s a websocket String message
+     * @return this
+     * @throws IOException
+     */
     abstract public WebSocket write(String s) throws IOException;
 
+    /**
+     * Use the underlying container's websocket to write the byte.
+     *
+     * @param b      a websocket byte message
+     * @param offset start
+     * @param length end
+     * @return this
+     * @throws IOException
+     */
     abstract public WebSocket write(byte[] b, int offset, int length) throws IOException;
 
+    /**
+     * Close the underlying WebSocket
+     */
     abstract public void close();
 
     protected String retrieveUUID() {

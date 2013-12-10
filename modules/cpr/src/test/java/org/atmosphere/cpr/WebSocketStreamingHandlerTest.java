@@ -17,7 +17,6 @@ package org.atmosphere.cpr;
 
 import org.atmosphere.container.BlockingIOCometSupport;
 import org.atmosphere.websocket.WebSocket;
-import org.atmosphere.websocket.WebSocketHandler;
 import org.atmosphere.websocket.WebSocketProcessor;
 import org.atmosphere.websocket.WebSocketStreamingHandler;
 import org.testng.annotations.AfterMethod;
@@ -32,8 +31,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
-import java.io.StringReader;
-import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.util.Enumeration;
 import java.util.concurrent.ExecutionException;
@@ -86,7 +83,7 @@ public class WebSocketStreamingHandlerTest {
         final WebSocket w = new ArrayBaseWebSocket(b);
         final WebSocketProcessor processor = WebSocketProcessorFactory.getDefault()
                 .getWebSocketProcessor(framework);
-        processor.registerWebSocketHandler("/*", new EchoHandler());
+        registerWebSocketHandler("/*", new EchoHandler());
 
         AtmosphereRequest request = new AtmosphereRequest.Builder().destroyable(false).body("yoComet").pathInfo("/a").build();
         processor.open(w, request, AtmosphereResponse.newInstance(framework.getAtmosphereConfig(), request, w));
@@ -95,13 +92,20 @@ public class WebSocketStreamingHandlerTest {
         assertEquals(b.toString(), "yoWebSocket");
     }
 
+    private void registerWebSocketHandler(String path, WebSocketStreamingHandler w) {
+
+        WebSocketProcessorFactory.getDefault()
+                        .getWebSocketProcessor(framework).registerWebSocketHandler(path,
+                new WebSocketProcessor.WebSocketHandlerProxy(framework.getBroadcasterFactory().lookup(path, true).getClass(), w));
+    }
+
     @Test
     public void invalidPathHandler() throws IOException, ServletException, ExecutionException, InterruptedException {
         ByteArrayOutputStream b = new ByteArrayOutputStream();
         final WebSocket w = new ArrayBaseWebSocket(b);
         final WebSocketProcessor processor = WebSocketProcessorFactory.getDefault()
                 .getWebSocketProcessor(framework);
-        processor.registerWebSocketHandler("/a", new EchoHandler());
+        registerWebSocketHandler("/a", new EchoHandler());
 
         AtmosphereRequest request = new AtmosphereRequest.Builder().destroyable(false).body("yoComet").pathInfo("/abcd").build();
         try {
@@ -119,8 +123,8 @@ public class WebSocketStreamingHandlerTest {
         final WebSocketProcessor processor = WebSocketProcessorFactory.getDefault()
                 .getWebSocketProcessor(framework);
 
-        processor.registerWebSocketHandler("/a", new EchoHandler());
-        processor.registerWebSocketHandler("/b", new EchoHandler());
+        registerWebSocketHandler("/a", new EchoHandler());
+        registerWebSocketHandler("/b", new EchoHandler());
 
         AtmosphereRequest request = new AtmosphereRequest.Builder().destroyable(false).body("a").pathInfo("/a").build();
         processor.open(w, request, AtmosphereResponse.newInstance(framework.getAtmosphereConfig(), request, w));
@@ -143,8 +147,8 @@ public class WebSocketStreamingHandlerTest {
         final WebSocketProcessor processor = WebSocketProcessorFactory.getDefault()
                 .getWebSocketProcessor(framework);
 
-        processor.registerWebSocketHandler("/a", new EchoHandler());
-        processor.registerWebSocketHandler("/b", new EchoHandler() {
+        registerWebSocketHandler("/a", new EchoHandler());
+        registerWebSocketHandler("/b", new EchoHandler() {
             @Override
             public void onTextStream(WebSocket webSocket, Reader reader) throws IOException {
                 webSocket.write("2" + drainReader(reader));

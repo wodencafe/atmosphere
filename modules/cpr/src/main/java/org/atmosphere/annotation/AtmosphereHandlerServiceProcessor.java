@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.atmosphere.annotation.AnnotationUtil.atmosphereConfig;
+import static org.atmosphere.annotation.AnnotationUtil.broadcaster;
 import static org.atmosphere.annotation.AnnotationUtil.filters;
 import static org.atmosphere.annotation.AnnotationUtil.listeners;
 
@@ -43,14 +44,13 @@ public class AtmosphereHandlerServiceProcessor implements Processor {
             AtmosphereHandlerService a = annotatedClass.getAnnotation(AtmosphereHandlerService.class);
 
             atmosphereConfig(a.atmosphereConfig(), framework);
-            framework.setDefaultBroadcasterClassName(a.broadcaster().getName());
             filters(a.broadcastFilters(), framework);
 
             Class<?>[] interceptors = a.interceptors();
             List<AtmosphereInterceptor> l = new ArrayList<AtmosphereInterceptor>();
             for (Class i : interceptors) {
                 try {
-                    AtmosphereInterceptor ai = (AtmosphereInterceptor) i.newInstance();
+                    AtmosphereInterceptor ai = (AtmosphereInterceptor) framework.newClassInstance(i);
                     l.add(ai);
                 } catch (Throwable e) {
                     logger.warn("", e);
@@ -58,7 +58,7 @@ public class AtmosphereHandlerServiceProcessor implements Processor {
             }
 
             if (a.path().contains("{")) {
-                framework.interceptors().add(new AtmosphereHandlerServiceInterceptor());
+                framework.interceptors().add(framework.newClassInstance(AtmosphereHandlerServiceInterceptor.class));
             }
 
             AtmosphereInterceptor aa = listeners(a.listeners(), framework);
@@ -68,14 +68,14 @@ public class AtmosphereHandlerServiceProcessor implements Processor {
 
             framework.sessionSupport(a.supportSession());
 
-            AtmosphereHandler handler = (AtmosphereHandler) annotatedClass.newInstance();
+            AtmosphereHandler handler = (AtmosphereHandler) framework.newClassInstance(annotatedClass);
             for (String s : a.properties()) {
                 String[] nv = s.split("=");
                 IntrospectionUtils.setProperty(handler, nv[0], nv[1]);
                 IntrospectionUtils.addProperty(handler, nv[0], nv[1]);
             }
 
-            framework.addAtmosphereHandler(a.path(), handler, l);
+            framework.addAtmosphereHandler(a.path(), handler, broadcaster(framework, a.broadcaster(), a.path()), l);
             framework.setBroadcasterCacheClassName(a.broadcasterCache().getName());
         } catch (Throwable e) {
             logger.warn("", e);

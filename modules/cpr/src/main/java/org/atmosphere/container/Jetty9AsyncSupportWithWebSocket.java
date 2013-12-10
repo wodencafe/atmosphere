@@ -81,7 +81,7 @@ public class Jetty9AsyncSupportWithWebSocket extends Servlet30CometSupport {
                 if (isJetty91) {
                     m = policy.getClass().getMethod("setMaxTextMessageSize", new Class[]{int.class});
                 } else {
-                    m = policy.getClass().getMethod("setMaxMessageSize", new Class[]{int.class});
+                    m = policy.getClass().getMethod("setMaxMessageSize", new Class[]{long.class});
                 }
                 m.invoke(policy, Integer.parseInt(max));
             }
@@ -93,7 +93,7 @@ public class Jetty9AsyncSupportWithWebSocket extends Servlet30CometSupport {
                 if (isJetty91) {
                     m = policy.getClass().getMethod("setMaxBinaryMessageSize", new Class[]{int.class});
                 } else {
-                    m = policy.getClass().getMethod("setMaxMessageSize", new Class[]{int.class});
+                    m = policy.getClass().getMethod("setMaxMessageSize", new Class[]{long.class});
                 }
                 m.invoke(policy, Integer.parseInt(max));
             }
@@ -153,9 +153,6 @@ public class Jetty9AsyncSupportWithWebSocket extends Servlet30CometSupport {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Action service(AtmosphereRequest req, AtmosphereResponse res)
             throws IOException, ServletException {
@@ -200,6 +197,4 @@ public class Jetty9AsyncSupportWithWebSocket extends Servlet30CometSupport {
     public boolean supportWebSocket() {
         return true;
     }
-
-
 }

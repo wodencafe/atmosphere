@@ -18,6 +18,7 @@ package org.atmosphere.util;
 import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereResource;
 import org.atmosphere.cpr.AtmosphereResourceEvent;
+import org.atmosphere.cpr.Broadcaster;
 import org.atmosphere.cpr.BroadcasterFuture;
 import org.atmosphere.cpr.DefaultBroadcaster;
 import org.atmosphere.cpr.Entry;
@@ -38,12 +39,15 @@ import java.util.concurrent.Future;
  * @author Jeanfrancois Arcand
  */
 public abstract class AbstractBroadcasterProxy extends DefaultBroadcaster {
+
     private static final Logger logger = LoggerFactory.getLogger(AbstractBroadcasterProxy.class);
 
     private Method jerseyBroadcast;
 
-    public AbstractBroadcasterProxy(String id, URI uri, AtmosphereConfig config) {
-        super(id, uri, config);
+    public AbstractBroadcasterProxy() {}
+
+    public Broadcaster initialize(String id, URI uri, AtmosphereConfig config) {
+        return super.initialize(id, uri, config);
     }
 
     /**
@@ -58,9 +62,6 @@ public abstract class AbstractBroadcasterProxy extends DefaultBroadcaster {
      */
     abstract public void outgoingBroadcast(Object message);
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     protected Runnable getBroadcastHandler() {
         return new Runnable() {
@@ -85,9 +86,6 @@ public abstract class AbstractBroadcasterProxy extends DefaultBroadcaster {
         spawnReactor();
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     protected void invokeOnStateChange(final AtmosphereResource r, final AtmosphereResourceEvent e) {
         if (r.getRequest() instanceof HttpServletRequest) {
@@ -119,9 +117,6 @@ public abstract class AbstractBroadcasterProxy extends DefaultBroadcaster {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Future<Object> broadcast(Object msg) {
         if (destroyed.get()) {
@@ -140,9 +135,6 @@ public abstract class AbstractBroadcasterProxy extends DefaultBroadcaster {
         return f;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Future<Object> broadcast(Object msg, AtmosphereResource r) {
         if (destroyed.get()) {
@@ -161,9 +153,6 @@ public abstract class AbstractBroadcasterProxy extends DefaultBroadcaster {
         return f;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public Future<Object> broadcast(Object msg, Set<AtmosphereResource> subset) {
         if (destroyed.get()) {

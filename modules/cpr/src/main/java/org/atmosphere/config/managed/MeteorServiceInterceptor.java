@@ -108,18 +108,21 @@ public class MeteorServiceInterceptor extends AtmosphereInterceptorAdapter {
                 // MeteorService
                 if (ReflectorServletProcessor.class.isAssignableFrom(w.atmosphereHandler.getClass())) {
                     Servlet s = ReflectorServletProcessor.class.cast(w.atmosphereHandler).getServlet();
-                    if (s.getClass().getAnnotation(MeteorService.class) != null) {
-                        String targetPath = s.getClass().getAnnotation(MeteorService.class).path();
+                    MeteorService m = s.getClass().getAnnotation(MeteorService.class);
+                    if (m!= null) {
+                        String targetPath = m.path();
                         if (targetPath.indexOf("{") != -1 && targetPath.indexOf("}") != -1) {
                             try {
                                 boolean singleton = s.getClass().getAnnotation(Singleton.class) != null;
                                 if (!singleton) {
-                                    ReflectorServletProcessor r = new ReflectorServletProcessor();
-                                    r.setServlet(s.getClass().newInstance());
-                                    r.init(config.getServletConfig());
-                                    config.framework().addAtmosphereHandler(path, r, w.interceptors);
+                                    ReflectorServletProcessor r = config.framework().newClassInstance(ReflectorServletProcessor.class);
+                                    r.setServlet(config.framework().newClassInstance(s.getClass()));
+                                    r.init(config);
+                                    config.framework().addAtmosphereHandler(path, r,
+                                            config.getBroadcasterFactory().lookup(m.broadcaster(), path, true), w.interceptors);
                                 } else {
-                                    config.framework().addAtmosphereHandler(path, w.atmosphereHandler, w.interceptors);
+                                    config.framework().addAtmosphereHandler(path, w.atmosphereHandler,
+                                            config.getBroadcasterFactory().lookup(m.broadcaster(), path, true), w.interceptors);
                                 }
                                 request.setAttribute(FrameworkConfig.NEW_MAPPING, "true");
                             } catch (Throwable e) {

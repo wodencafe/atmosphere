@@ -15,6 +15,7 @@
  */
 package org.atmosphere.cpr;
 
+import org.atmosphere.util.ServletContextFactory;
 import org.testng.annotations.Test;
 
 import javax.servlet.ServletConfig;
@@ -33,6 +34,14 @@ public class AtmosphereFrameworkTest {
         AtmosphereFramework f = new AtmosphereFramework();
         f.setBroadcasterFactory(new DefaultBroadcasterFactory(DefaultBroadcaster.class, "NEVER", f.getAtmosphereConfig()));
         assertNotNull(f.getBroadcasterFactory());
+    }
+
+    @Test
+    public void testServletContextFactory() throws ServletException {
+        AtmosphereFramework f = new AtmosphereFramework();
+        f.init();
+        assertNotNull(ServletContextFactory.getDefault().getServletContext());
+
     }
 
     @Test
@@ -67,9 +76,8 @@ public class AtmosphereFrameworkTest {
         @Override
         public void init(ServletConfig config) throws ServletException {
 
-            framework.setBroadcasterFactory(new MyBroadcasterFactory());
             super.init(config);
-
+            framework.setBroadcasterFactory(new MyBroadcasterFactory());
         }
 
     }

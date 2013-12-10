@@ -15,7 +15,8 @@
  */
 package org.atmosphere.util;
 
-import org.atmosphere.cpr.AtmosphereResponse;
+import org.atmosphere.cpr.AtmosphereResource;
+import org.atmosphere.cpr.HeaderConfig;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.Enumeration;
@@ -29,7 +30,11 @@ import static org.atmosphere.cpr.HeaderConfig.WEBSOCKET_UPGRADE;
  */
 public final class Utils {
 
-    public static boolean webSocketEnabled(HttpServletRequest request) {
+    public final static boolean webSocketEnabled(HttpServletRequest request) {
+
+        boolean allowWebSocketWithoutHeaders = request.getHeader(HeaderConfig.X_ATMO_WEBSOCKET_PROXY) != null ? true : false;
+        if (allowWebSocketWithoutHeaders) return true;
+
         boolean webSocketEnabled = false;
         Enumeration<String> connection = request.getHeaders("Connection");
         if (connection == null || !connection.hasMoreElements()) {
@@ -46,5 +51,12 @@ public final class Utils {
             }
         }
         return webSocketEnabled;
+    }
+
+    public final static boolean resumableTransport(AtmosphereResource.TRANSPORT t) {
+        if (t.equals(AtmosphereResource.TRANSPORT.JSONP) || t.equals(AtmosphereResource.TRANSPORT.LONG_POLLING)) {
+            return true;
+        }
+        return false;
     }
 }

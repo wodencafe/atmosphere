@@ -19,17 +19,14 @@ import org.atmosphere.config.AtmosphereAnnotation;
 import org.atmosphere.config.service.WebSocketHandlerService;
 import org.atmosphere.cpr.AtmosphereFramework;
 import org.atmosphere.cpr.AtmosphereInterceptor;
-import org.atmosphere.cpr.AtmosphereResource;
 import org.atmosphere.cpr.WebSocketProcessorFactory;
-import org.atmosphere.handler.AbstractReflectorAtmosphereHandler;
 import org.atmosphere.websocket.WebSocketHandler;
 import org.atmosphere.websocket.WebSocketProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-
 import static org.atmosphere.annotation.AnnotationUtil.atmosphereConfig;
+import static org.atmosphere.annotation.AnnotationUtil.broadcasterClass;
 import static org.atmosphere.annotation.AnnotationUtil.filters;
 import static org.atmosphere.annotation.AnnotationUtil.interceptors;
 import static org.atmosphere.annotation.AnnotationUtil.listeners;
@@ -45,17 +42,9 @@ public class WebSocketHandlerServiceProcessor implements Processor {
             Class<WebSocketHandler> s = (Class<WebSocketHandler>) annotatedClass;
             WebSocketHandlerService m = s.getAnnotation(WebSocketHandlerService.class);
 
-            framework.addAtmosphereHandler(m.path(), new AbstractReflectorAtmosphereHandler() {
-                @Override
-                public void onRequest(AtmosphereResource resource) throws IOException {
-                }
-
-                @Override
-                public void destroy() {
-                }
-            }).initWebSocket();
-
             atmosphereConfig(m.atmosphereConfig(), framework);
+            framework.addAtmosphereHandler(m.path(), AtmosphereFramework.REFLECTOR_ATMOSPHEREHANDLER).initWebSocket();
+
             framework.setDefaultBroadcasterClassName(m.broadcaster().getName());
             filters(m.broadcastFilters(), framework);
 
@@ -67,9 +56,12 @@ public class WebSocketHandlerServiceProcessor implements Processor {
             }
 
             WebSocketProcessor p = WebSocketProcessorFactory.getDefault().getWebSocketProcessor(framework);
-            p.registerWebSocketHandler(m.path(), s.newInstance());
+            p.registerWebSocketHandler(m.path(), new WebSocketProcessor.WebSocketHandlerProxy( broadcasterClass(framework, m.broadcaster()),
+                    framework.newClassInstance(s)));
         } catch (Throwable e) {
             logger.warn("", e);
         }
     }
+
+
 }

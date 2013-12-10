@@ -54,12 +54,13 @@
 package org.atmosphere.cpr;
 
 import org.atmosphere.container.BlockingIOCometSupport;
-import org.atmosphere.container.GlassFishServlet30WebSocketSupport;
+import org.atmosphere.container.GlassFishServ30WebSocketSupport;
 import org.atmosphere.container.GlassFishWebSocketSupport;
 import org.atmosphere.container.GlassFishv2CometSupport;
 import org.atmosphere.container.Grizzly2CometSupport;
 import org.atmosphere.container.Grizzly2WebSocketSupport;
 import org.atmosphere.container.GrizzlyCometSupport;
+import org.atmosphere.container.GrizzlyServlet30WebSocketSupport;
 import org.atmosphere.container.JBossWebCometSupport;
 import org.atmosphere.container.JBossWebSocketSupport;
 import org.atmosphere.container.JSR356AsyncSupport;
@@ -74,6 +75,7 @@ import org.atmosphere.container.Tomcat7AsyncSupportWithWebSocket;
 import org.atmosphere.container.Tomcat7CometSupport;
 import org.atmosphere.container.Tomcat7Servlet30SupportWithWebSocket;
 import org.atmosphere.container.TomcatCometSupport;
+import org.atmosphere.container.WebLogicServlet30WithWebSocket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,7 +83,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 /**
- * This is the default implementation of @link {AsyncSupportResolver}
+ * This is the default implementation of @link {AsyncSupportResolver}.
  *
  * @author Viktor Klang
  */
@@ -107,6 +109,7 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
     public final static String NETTY = "org.jboss.netty.channel.Channel";
     public final static String JBOSS_AS7_WEBSOCKET = "org.atmosphere.jboss.as.websockets.servlet.WebSocketServlet";
     public final static String JSR356_WEBSOCKET = "javax.websocket.Endpoint";
+    public final static String WEBLOGIC_WEBSOCKWET = "weblogic.websocket.annotation.WebSocket";
 
     private final AtmosphereConfig config;
 
@@ -115,7 +118,7 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
     }
 
     /**
-     * Convenience method that tests if a class with the given FQN is present on the classpath
+     * Convenience method that tests if a class with the given FQN is present on the classpath.
      *
      * @param testClass
      * @return true if the class is present
@@ -128,14 +131,14 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
             return false;
         } catch (NoClassDefFoundError ex) {
             return false;
-        // JDK 7
-        }  catch (UnsupportedClassVersionError ex) {
+            // JDK 7
+        } catch (UnsupportedClassVersionError ex) {
             return false;
         }
     }
 
     /**
-     * Returns a list of comet support by containers available on the classpath
+     * Returns a list of comet support by containers available on the classpath.
      *
      * @return
      */
@@ -183,9 +186,6 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
         return new LinkedList<Class<? extends AsyncSupport>>() {
             {
                 if (useServlet30Async && !useNativeIfPossible) {
-                    // Must always be called first.
-                    if (testClassExists(JSR356_WEBSOCKET))
-                        add(JSR356AsyncSupport.class);
 
                     if (testClassExists(TOMCAT_WEBSOCKET))
                         add(Tomcat7Servlet30SupportWithWebSocket.class);
@@ -196,8 +196,21 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
                     if (testClassExists(JETTY_8))
                         add(JettyServlet30AsyncSupportWithWebSocket.class);
 
+                    if (testClassExists(GRIZZLY2_WEBSOCKET))
+                        add(GlassFishServ30WebSocketSupport.class);
+
                     if (testClassExists(GRIZZLY_WEBSOCKET))
-                        add(GlassFishServlet30WebSocketSupport.class);
+                        add(GrizzlyServlet30WebSocketSupport.class);
+
+                    if (testClassExists(WEBLOGIC_WEBSOCKWET)) {
+                        logger.warn("***************************************************************************************************");
+                        logger.warn("WebLogic WebSocket detected and will be deployed under the hardcoded path <<application-name>>/ws/*");
+                        logger.warn("***************************************************************************************************");
+                        add(WebLogicServlet30WithWebSocket.class);
+                    }
+
+                    if (testClassExists(JSR356_WEBSOCKET))
+                        add(JSR356AsyncSupport.class);
                 } else {
                     if (testClassExists(TOMCAT_WEBSOCKET))
                         add(Tomcat7AsyncSupportWithWebSocket.class);
@@ -222,7 +235,7 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
     }
 
     /**
-     * This method is used to determine the default AsyncSupport if all else fails
+     * This method is used to determine the default AsyncSupport if all else fails.
      *
      * @param preferBlocking
      * @return
@@ -236,9 +249,9 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
     }
 
     /**
-     * Given a Class of something that extends AsyncSupport, it tries to return an instance of that class
+     * Given a Class of something that extends AsyncSupport, it tries to return an instance of that class.
      * <p/>
-     * The class has to have a visible constructor with the signature (@link {AtmosphereConfig})
+     * The class has to have a visible constructor with the signature (@link {AtmosphereConfig}).
      *
      * @param targetClass
      * @return an instance of the specified class
@@ -249,8 +262,7 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
                     .newInstance(config);
         } catch (final Exception e) {
             logger.error("failed to create comet support class: {}, error: {}", targetClass, e.getMessage());
-            throw new IllegalArgumentException(
-                    "Comet support class " + targetClass.getCanonicalName() + " has bad signature.", e);
+            throw new IllegalArgumentException("Unable to create" + targetClass, e);
         }
     }
 
@@ -261,12 +273,12 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
                     .getDeclaredConstructor(new Class[]{AtmosphereConfig.class}).newInstance(config);
         } catch (final Exception e) {
             logger.error("failed to create comet support class: {}, error: {}", targetClassFQN, e.getMessage());
-            throw new IllegalArgumentException("Comet support class " + targetClassFQN + " has bad signature.", e);
+            throw new IllegalArgumentException("Unable to create" + targetClassFQN, e);
         }
     }
 
     /**
-     * This method is the general interface to the outside world
+     * This method is the general interface to the outside world.
      *
      * @param useNativeIfPossible - should the resolver try to use a native container comet support if present?
      * @param defaultToBlocking   - should the resolver default to blocking IO comet support?
@@ -284,6 +296,7 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
         return servletAsyncSupport;
     }
 
+    @Override
     public AsyncSupport resolve(boolean useNativeIfPossible, boolean defaultToBlocking, boolean useServlet30Async) {
         AsyncSupport cs = null;
 
@@ -312,7 +325,7 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
     }
 
     /**
-     * This method is called to determine which native comet support to the used
+     * This method is called to determine which native comet support to the used.
      *
      * @param available
      * @return the result of @link {resolveMultipleNativeSupportConflict} if there are more than 1 item in the list of available ontainers
@@ -324,7 +337,7 @@ public class DefaultAsyncSupportResolver implements AsyncSupportResolver {
     }
 
     /**
-     * This method is called if there are more than one potential native container in scope
+     * This method is called if there are more than one potential native container in scope.
      *
      * @return a AsyncSupport instance
      */

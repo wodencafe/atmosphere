@@ -39,7 +39,7 @@ import static org.atmosphere.cpr.ApplicationConfig.MESSAGE_DELIMITER;
 import static org.atmosphere.cpr.ApplicationConfig.EXCLUDED_CONTENT_TYPES;
 
 /**
- * An {@link org.atmosphere.cpr.AtmosphereInterceptor} that add a add message size and delimiter.
+ * An {@link org.atmosphere.cpr.AtmosphereInterceptor} that add a message size and delimiter.
  * <p/>
  * The special String is configurable using {@link org.atmosphere.cpr.ApplicationConfig#MESSAGE_DELIMITER} and
  * you can configure this class to exclude some response's content-type by using the {@link ApplicationConfig#EXCLUDED_CONTENT_TYPES}
@@ -86,7 +86,7 @@ public class TrackMessageSizeInterceptor extends AtmosphereInterceptorAdapter {
     }
 
     /**
-     * Excluse response's content-type from being processed by this class.
+     * Exclude response's content-type from being processed by this class.
      * @param excludedContentType the value of {@link org.atmosphere.cpr.AtmosphereResponse#getContentType()}
      * @return this
      */
@@ -113,7 +113,6 @@ public class TrackMessageSizeInterceptor extends AtmosphereInterceptorAdapter {
         return Action.CONTINUE;
     }
 
-
     @Override
     public String toString() {
         return " Track Message Size Interceptor using " + endString;
@@ -129,8 +128,10 @@ public class TrackMessageSizeInterceptor extends AtmosphereInterceptorAdapter {
                 response.setCharacterEncoding(OUT_ENCODING);
 
                 CharBuffer cb = inCharset.newDecoder().decode(ByteBuffer.wrap(responseDraft, 0, responseDraft.length));
+                String s = cb.toString();
 
-                if (cb.toString().trim().length() == 0) {
+                if (s.trim().length() == 0 || s.indexOf(endString) != -1) {
+                    logger.trace("Already filtered {}", s);
                     return responseDraft;
                 }
 
@@ -147,7 +148,6 @@ public class TrackMessageSizeInterceptor extends AtmosphereInterceptorAdapter {
             } else {
                 return responseDraft;
             }
-
         }
     }
 }

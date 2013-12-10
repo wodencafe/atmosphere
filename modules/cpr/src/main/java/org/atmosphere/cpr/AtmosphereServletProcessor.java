@@ -56,21 +56,18 @@ import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
 
 /**
- * Simple interface that can be used to wrap a {@link Servlet} from an
- * {@link AtmosphereHandler}
+ * Simple interface that can be used to wrap a {@link Servlet} from an {@link AtmosphereHandler}.
  *
- * @author jeanfrancoisarcand
+ * @author Jeanfrancois Arcand
  */
-public interface AtmosphereServletProcessor extends
-        AtmosphereHandler {
+public interface AtmosphereServletProcessor extends AtmosphereHandler {
 
     /**
-     * Initialize the {@link AtmosphereServletProcessor} using the {@link ServletConfig}
+     * Initialize the {@link AtmosphereServletProcessor} using the {@link ServletConfig}.
      *
-     * @param sc the  {@link ServletConfig}
+     *
+     * @param config the {@link javax.servlet.ServletConfig}
      * @throws ServletException
      */
-    void init(ServletConfig sc) throws ServletException;
-
-
+    void init(AtmosphereConfig config) throws ServletException;
 }

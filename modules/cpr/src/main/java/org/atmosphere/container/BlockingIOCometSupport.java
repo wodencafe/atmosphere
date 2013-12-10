@@ -57,6 +57,9 @@ import org.atmosphere.cpr.ApplicationConfig;
 import org.atmosphere.cpr.AsynchronousProcessor;
 import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereRequest;
+import org.atmosphere.cpr.AtmosphereResource;
+import org.atmosphere.cpr.AtmosphereResourceEvent;
+import org.atmosphere.cpr.AtmosphereResourceEventListenerAdapter;
 import org.atmosphere.cpr.AtmosphereResourceImpl;
 import org.atmosphere.cpr.AtmosphereResponse;
 import org.atmosphere.cpr.Broadcaster;
@@ -69,12 +72,11 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 /**
- * This class gets used when the {@link org.atmosphere.cpr.AtmosphereFramework} fails to autodetect
+ * This class is used when the {@link org.atmosphere.cpr.AtmosphereFramework} fails to autodetect
  * the Servlet Container we are running on.
  * <p/>
  * This {@link org.atmosphere.cpr.AsyncSupport} implementation uses a blocking approach, meaning
- * the request thread will be blocked until another Thread invoke the
- * {@link Broadcaster#broadcast}
+ * the request thread will be blocked until another Thread invoke the {@link Broadcaster#broadcast}.
  *
  * @author Jeanfrancois Arcand
  */
@@ -88,9 +90,7 @@ public class BlockingIOCometSupport extends AsynchronousProcessor {
         super(config);
     }
 
-    /**
-     * {@inheritDoc}
-     */
+    @Override
     public Action service(AtmosphereRequest req, AtmosphereResponse res)
             throws IOException, ServletException {
 
@@ -143,9 +143,7 @@ public class BlockingIOCometSupport extends AsynchronousProcessor {
                 event = req.getAttribute(JBossWebCometSupport.HTTP_EVENT);
                 if (event != null) {
                     Class.forName(org.jboss.servlet.http.HttpEvent.class.getName());
-                    if (event != null) {
-                        org.jboss.servlet.http.HttpEvent.class.cast(event).close();
-                    }
+                    org.jboss.servlet.http.HttpEvent.class.cast(event).close();
                 }
             } catch (Throwable e) {
                 logger.trace("", e);
@@ -166,11 +164,18 @@ public class BlockingIOCometSupport extends AsynchronousProcessor {
     protected void suspend(Action action, AtmosphereRequest req, AtmosphereResponse res)
             throws IOException, ServletException {
 
-        CountDownLatch latch = new CountDownLatch(1);
+        final CountDownLatch latch = new CountDownLatch(1);
         req.setAttribute(LATCH, latch);
 
         boolean ok = true;
         try {
+            AtmosphereResource resource = req.resource();
+            resource.addEventListener(new AtmosphereResourceEventListenerAdapter() {
+                @Override
+                public void onResume(AtmosphereResourceEvent event) {
+                    latch.countDown();
+                }
+            });
             if (action.timeout() != -1) {
                 ok = latch.await(action.timeout(), TimeUnit.MILLISECONDS);
             } else {
@@ -201,9 +206,6 @@ public class BlockingIOCometSupport extends AsynchronousProcessor {
         return a;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
     public void action(AtmosphereResourceImpl r) {
         try {

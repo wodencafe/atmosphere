@@ -16,45 +16,53 @@
 package org.atmosphere.interceptor;
 
 import org.atmosphere.cpr.Action;
+import org.atmosphere.cpr.ApplicationConfig;
+import org.atmosphere.cpr.AtmosphereConfig;
 import org.atmosphere.cpr.AtmosphereInterceptorAdapter;
 import org.atmosphere.cpr.AtmosphereRequest;
 import org.atmosphere.cpr.AtmosphereResource;
 import org.atmosphere.cpr.AtmosphereResponse;
 
-import java.util.concurrent.atomic.AtomicReference;
-
 /**
- * CORS support
+ * CORS support.
  *
  * @author Janusz Sobolewski
  */
 public class CorsInterceptor extends AtmosphereInterceptorAdapter {
 
-    private final AtomicReference<String> emptyMessage = new AtomicReference<String>("");
+     private boolean enableAccessControl = true;
+
+     @Override
+     public void configure(AtmosphereConfig config) {
+         String ac = config.getInitParameter(ApplicationConfig.DROP_ACCESS_CONTROL_ALLOW_ORIGIN_HEADER);
+         if (ac != null) {
+            enableAccessControl = Boolean.parseBoolean(ac);
+         }
+     }
 
     @Override
     public Action inspect(AtmosphereResource resource) {
-        
-        AtmosphereRequest req = resource.getRequest();                                   
+
+        if (!enableAccessControl) return Action.CONTINUE;
+
+        AtmosphereRequest req = resource.getRequest();
         AtmosphereResponse res = resource.getResponse();
-        
-        if(req.getHeader("Origin") != null){
+
+        if (req.getHeader("Origin") != null && res.getHeader("Access-Control-Allow-Origin") == null) {
             res.addHeader("Access-Control-Allow-Origin", req.getHeader("Origin"));
             res.addHeader("Access-Control-Expose-Headers", "X-Cache-Date, X-Atmosphere-tracking-id");
             res.setHeader("Access-Control-Allow-Credentials", "true");
         }
 
-        if("OPTIONS".equals(req.getMethod())){
+        if ("OPTIONS".equals(req.getMethod())) {
             res.setHeader("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
             res.setHeader("Access-Control-Allow-Headers",
-                    "Origin, Content-Type, X-Atmosphere-Framework, X-Cache-Date, X-Atmosphere-tracking-id, X-Atmosphere-Transport, X-Atmosphere-TrackMessageSize, X-atmo-protocol");
+                    "Origin, Content-Type, AuthToken, X-Atmosphere-Framework, X-Cache-Date, X-Atmosphere-tracking-id, X-Atmosphere-Transport, X-Atmosphere-TrackMessageSize, X-atmo-protocol");
             res.setHeader("Access-Control-Max-Age", "-1");
 
-            res.write(emptyMessage.get());
-            
             return Action.SKIP_ATMOSPHEREHANDLER;
-        } 
-        
+        }
+
         return Action.CONTINUE;
     }
 

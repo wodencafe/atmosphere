@@ -20,6 +20,7 @@ import org.atmosphere.interceptor.AtmosphereResourceLifecycleInterceptor;
 import org.atmosphere.interceptor.AtmosphereResourceStateRecovery;
 import org.atmosphere.interceptor.SSEAtmosphereInterceptor;
 import org.atmosphere.util.EndpointMapper;
+import org.atmosphere.websocket.DefaultWebSocketProcessor;
 import org.atmosphere.websocket.WebSocketProcessor;
 import org.atmosphere.websocket.WebSocketProtocol;
 
@@ -234,6 +235,15 @@ public interface ApplicationConfig {
      */
     String WEBSOCKET_REQUIRE_SAME_ORIGIN = "org.atmosphere.websocket.requireSameOrigin";
     /**
+     * Set the minimum WebSocket version that Jetty should accept. If not set, Jetty defaults to version 13 (RFC6455).
+     * <p>
+     * Jetty 7 and 8 is able to support buggy pre-draft versions of WebSocket. Set to 0 or -1 to let Jetty support all accept all supported versions.
+     * <p>
+     * Default: [nothing]<br>
+     * Value: org.atmosphere.websocket.jetty.minVersion
+     */
+    String JETTY_WEBSOCKET_MIN_VERSION = "org.atmosphere.websocket.jetty.minVersion";
+    /**
      * The {@link AtmosphereResource}.
      * <p>
      * Default: org.atmosphere.cpr.AtmosphereResourceImpl<br>
@@ -301,7 +311,7 @@ public interface ApplicationConfig {
     /**
      * The maximum number of Thread created when writing requests {@link BroadcasterConfig#setAsyncWriteService(java.util.concurrent.ExecutorService)}.
      * <p>
-     * Default: unlimited<br>
+     * Default: 200<br>
      * Value: org.atmosphere.cpr.broadcaster.maxAsyncWriteThreads
      */
     String BROADCASTER_ASYNC_WRITE_THREADPOOL_MAXSIZE = ApplicationConfig.class.getPackage().getName() + ".broadcaster.maxAsyncWriteThreads";
@@ -466,6 +476,14 @@ public interface ApplicationConfig {
      */
     String ATMOSPHERERESOURCE_INTERCEPTOR_METHOD = AtmosphereResourceLifecycleInterceptor.class.getName() + ".method";
     /**
+     * The timeout, in second, for configuring the time an AtmosphereResource is suspended. Same as {@link AtmosphereResource#suspend(long, java.util.concurrent.TimeUnit)} when the {@link AtmosphereResourceLifecycleInterceptor}
+     * is used.
+     * <p>
+     * Default: "-1"<br>
+     * Value: org.atmosphere.interceptor.AtmosphereResourceLifecycleInterceptor.timeout
+     */
+    String ATMOSPHERERESOURCE_INTERCEPTOR_TIMEOUT= AtmosphereResourceLifecycleInterceptor.class.getName() + ".timeout";
+    /**
      * Disable au-discovery of pre-installed {@link AtmosphereInterceptor}s.
      * <p>
      * Default: false<br>
@@ -613,5 +631,27 @@ public interface ApplicationConfig {
      * Value: org.atmosphere.cpr.useBuildInSession
      */
     String BUILT_IN_SESSION = ApplicationConfig.class.getName() + ".useBuildInSession";
+    /**
+     * The default {@link AtmosphereObjectFactory} class.
+     * <p>
+     * Default: DefaultAtmosphereObjectFactory (calls newInstance() on class)<br>
+     * Value: org.atmosphere.cpr.objectFactory
+     */
+    String OBJECT_FACTORY = ApplicationConfig.class.getName() + ".objectFactory";
+    /**
+     * The maximum number of time, in seconds, thread will be stay alive when created with {@link org.atmosphere.util.ExecutorsFactory}. Those {@link java.util.concurrent.Executor}.
+     * are used by the {@link DefaultBroadcaster}'s Thread Pool. See also {@link #BROADCASTER_ASYNC_WRITE_THREADPOOL_MAXSIZE} and {@link #BROADCASTER_MESSAGE_PROCESSING_THREADPOOL_MAXSIZE}
+     * <p>
+     * Default: 10 seconds<br>
+     * Value: org.atmosphere.cpr.threadPool.maxKeepAliveThreads
+     */
+    String EXECUTORFACTORY_KEEP_ALIVE = ApplicationConfig.class.getPackage().getName() + ".threadPool.maxKeepAliveThreads";
+    /**
+     * In Memory WebSocket buffered message size;
+     * <p>
+     * Default: 2097152 (2 mg)<br>
+     * Value: org.atmosphere.websocket.webSocketBufferingMaxSize
+     */
+    String IN_MEMORY_STREAMING_BUFFER_SIZE = DefaultWebSocketProcessor.class.getPackage().getName() + ".webSocketBufferingMaxSize";
 }
 
